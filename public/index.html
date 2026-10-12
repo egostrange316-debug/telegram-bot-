@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IELTS va CEFR natijalari</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --fg: var(--tg-theme-text-color, #1d1d1f);
+    --muted: var(--tg-theme-hint-color, #6e6e73);
+    --card: var(--tg-theme-secondary-bg-color, #f3f4f6);
+    --accent: var(--tg-theme-button-color, #2a78d6);
+    --accent-fg: var(--tg-theme-button-text-color, #ffffff);
+    --up: #2e9d57; --down: #d64545;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: var(--tg-theme-bg-color, #17181b); --fg: var(--tg-theme-text-color, #f2f2f2); --card: var(--tg-theme-secondary-bg-color, #24262b); --muted: var(--tg-theme-hint-color, #9a9ca3); }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  h2 { font-size: 16px; margin: 20px 0 8px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .tabs button { flex: 1; border: 0; border-radius: 10px; padding: 10px; font-size: 15px; background: var(--card); color: var(--fg); cursor: pointer; }
+  .tabs button.on { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .card { background: var(--card); border-radius: 12px; padding: 10px; }
+  .card b { display: block; font-size: 20px; }
+  .card span { color: var(--muted); font-size: 12px; }
+  .trend { margin: 12px 0; padding: 10px 12px; border-radius: 12px; background: var(--card); font-weight: 600; }
+  .trend.up { color: var(--up); } .trend.down { color: var(--down); }
+  .chart { position: relative; height: 260px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td { padding: 7px 4px; border-bottom: 1px solid var(--card); vertical-align: top; }
+  td.n { width: 32px; color: var(--muted); }
+  td.r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tr.me td { font-weight: 700; color: var(--accent); }
+  .muted { color: var(--muted); }
+  .err { padding: 16px; border-radius: 12px; background: var(--card); }
+</style>
+</head>
+<body>
+<h1 id="title">Natijalarim</h1>
+<div class="tabs"><button data-exam="ielts" class="on">🇬🇧 IELTS</button><button data-exam="cefr">🇪🇺 CEFR</button></div>
+<div id="app"><p class="muted">Yuklanmoqda…</p></div>
+
+<script>
+(function () {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) { tg.ready(); tg.expand(); }
+  // Ilovadan ochilganda: /webapp/#token=<ilova JWT>
+  const hashToken = new URLSearchParams(location.hash.slice(1)).get('token');
+  const headers = {};
+  if (tg && tg.initData) headers['X-Telegram-Init-Data'] = tg.initData;
+  else if (hashToken) headers.Authorization = 'Bearer ' + hashToken;
+
+  const SECTIONS = { reading: 'Reading', listening: 'Listening', writing: 'Writing' };
+  const COLORS = { reading: '#2a78d6', listening: '#e07b39', writing: '#3a9d5d' };
+  const TREND = { up: "📈 O'syapsiz", down: '📉 Pasayyapsiz', flat: '➡️ Barqaror' };
+  const app = document.getElementById('app');
+  let chart = null;
+
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const get = (url) => fetch(url, { headers }).then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
+
+  async function load(exam) {
+    app.innerHTML = '<p class="muted">Yuklanmoqda…</p>';
+    try {
+      const [res, board] = await Promise.all([get('../api/exams/results?exam=' + exam), get('../api/exams/leaderboard?exam=' + exam)]);
+      render(exam, res, board);
+    } catch (e) {
+      app.innerHTML = '<div class="err">' + (e === 401 ? 'Avval botda kiring: /start' : "Ma'lumot yuklanmadi. Keyinroq urinib ko'ring.") + '</div>';
+    }
+  }
+
+  function render(exam, res, board) {
+    const s = res.sections;
+    const cards = Object.keys(SECTIONS).map((k) => {
+      const v = s[k];
+      const val = v.count ? (exam === 'ielts' ? v.average_band : v.average_percent + '%') : '—';
+      return '<div class="card"><span>' + SECTIONS[k] + '</span><b>' + val + '</b><span>' + v.count + ' test</span></div>';
+    }).join('');
+    const t = res.trend.direction;
+    const trend = t ? '<div class="trend ' + t + '">' + TREND[t] + ' (' + (res.trend.diff > 0 ? '+' : '') + res.trend.diff + '%)</div>' : '';
+    const rows = board.leaderboard.slice(0, 50).map((b) =>
+      '<tr class="' + (b.user_id === board.me ? 'me' : '') + '"><td class="n">' + b.place + '</td><td>' + esc(b.full_name) +
+      '<div class="muted">' + esc(b.group_name || '') + '</div></td><td class="r">' + b.average_percent + '%' +
+      (b.average_band != null ? '<div class="muted">band ' + b.average_band + '</div>' : '') + '</td></tr>').join('');
+
+    app.innerHTML =
+      '<div class="cards">' + cards + '</div>' + trend +
+      '<h2>Grafik</h2>' + (res.items.length ? '<div class="chart"><canvas id="c"></canvas></div>' : '<p class="muted">Hali natija yo\'q.</p>') +
+      '<h2>🏆 O\'quv markaz reytingi</h2>' + (rows ? '<table>' + rows + '</table>' : '<p class="muted">Reyting bo\'sh.</p>');
+
+    if (chart) chart.destroy();
+    if (!res.items.length) return;
+    const fg = getComputedStyle(document.body).color;
+    chart = new Chart(document.getElementById('c'), {
+      type: 'line',
+      data: {
+        labels: res.items.map((it) => new Date(it.date).toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit' })),
+        datasets: Object.keys(SECTIONS).filter((k) => s[k].count).map((k) => ({
+          label: SECTIONS[k],
+          data: res.items.map((it) => (it.section === k ? (exam === 'ielts' ? it.band : it.percent) : null)),
+          borderColor: COLORS[k], backgroundColor: COLORS[k], spanGaps: true, tension: 0.25, pointRadius: 3,
+        })),
+      },
+      options: {
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: fg } }, tooltip: { callbacks: { title: (i) => res.items[i[0].dataIndex].title } } },
+        scales: {
+          y: exam === 'ielts' ? { min: 0, max: 9, ticks: { color: fg } } : { min: 0, max: 100, ticks: { color: fg, callback: (v) => v + '%' } },
+          x: { ticks: { color: fg } },
+        },
+      },
+    });
+  }
+
+  document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
+    load(b.dataset.exam);
+  }));
+  load('ielts');
+})();
+</script>
+</body>
+</html>
