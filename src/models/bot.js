@@ -96,7 +96,7 @@ const GroupChat = mongoose.model(
       title: String,
       group_name: { type: String, default: null },
       attendance_time: { type: String, default: '14:00' },
-      days: { type: [Number], default: [1, 2, 3, 4, 5, 6] },
+      days: { type: [Number], default: [0, 1, 2, 3, 4, 5, 6] },
       pay_day: { type: Number, default: 1, min: 1, max: 31 },
       pay_time: { type: String, default: '10:00' },
       enabled: { type: Boolean, default: true },

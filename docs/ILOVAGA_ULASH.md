@@ -6,6 +6,16 @@ MongoDB `users` va `attendances`, `name_key/password_hash`, JWT `{id}` + HS256.
 Botning test natijalari `bot_attempts` kolleksiyasiga yoziladi. Ilova ularni bot API orqali o‘qiydi.
 Bu repo bot va tayyor frontend komponentini saqlaydi; mavjud ilovaning frontend kodi bu repoda yo‘q.
 
+## Hozirgi frontend haqida
+
+`Codify` reposining `main` va `egostrange316-debug-curly-spork` branchlari ham tekshirildi.
+Ulardagi login Supabase `students` jadvali orqali ishlaydi va ENZO-APP JWT tokenini olmaydi.
+Shu versiyaga komponentni qo‘shishning o‘zi hisoblarni avtomatik birlashtirmaydi.
+Yuqoridagi komponent ENZO-APP `/api/auth/login` endpointidan olingan tokenni kutadi.
+Hozir ishlatilayotgan frontend branchi aniqlanib, uning kirish tizimi ENZO-APP bilan
+ulanishi yoki alohida tekshiriladigan akkaunt bog‘lash yo‘li qo‘shilishi kerak.
+Frontend manba kodi bu bot reposiga nusxalanmadi va boshqa ilova repolari o‘zgartirilmadi.
+
 ## 1. Bot serveri
 
 1. Node.js 22+ o‘rnating, `npm ci` bajaring.
@@ -63,7 +73,7 @@ Markaz admini Telegram guruhida ham admin bo‘lishi kerak.
 ```
 
 `1-guruh` ilovadagi `group_name` bilan bir xil. Nomsiz `/ulash` butun markazni ulaydi.
-Har kuni yuborish uchun yuqoridagi 7 kunni bering. Standart jadval dushanba–shanba.
+Har kuni yuborish uchun yuqoridagi 7 kunni bering. Yangi ulanadigan guruhda standart jadval har kuni.
 Vaqt Toshkent bo‘yicha: 13:30 da admin ro‘yxatni oladi; 14:00 da guruh hisobotni oladi.
 00:15 kabi jadvalda ro‘yxat oldingi kuni 23:45 da keladi.
 Oylik hisobot obuna muddati va statusiga tayanadi; bu bank to‘lovini avtomatik tekshirish emas.

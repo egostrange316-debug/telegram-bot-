@@ -12,25 +12,24 @@ const MONTHS = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avg
  * To'lov holati ilovadagi qoidaga ko'ra: obuna muddati (subscription_end_date) o'tmagan bo'lsa — to'lagan.
  * Muddati o'tgan (5 kunlik imtiyoz ichida ham) yoki bloklangan — to'lamagan.
  */
-async function split(group) {
+async function split(group, now = new Date()) {
   const students = await roster(group);
-  const now = new Date();
   const paid = students.filter((s) => subscriptionState(s, now) === 'paid');
   const unpaid = students.filter((s) => subscriptionState(s, now) !== 'paid');
   return { paid, unpaid };
 }
 
-const monthTitle = () => {
-  const p = tashkentParts();
+const monthTitle = (now = new Date()) => {
+  const p = tashkentParts(now);
   return `${MONTHS[p.month - 1]} ${p.year}`;
 };
 
 /** Guruhga: kim to'lagan, kim to'lamagan */
-async function postReport(api, group, key) {
+async function postReport(api, group, key, scheduledAt = new Date()) {
   const { paid, unpaid } = await split(group);
   const list = (arr) => (arr.length ? arr.map((s, i) => `${i + 1}. ${esc(String(s.full_name).slice(0, 150))}`).join('\n') : '—');
   const text =
-    `💰 <b>Oylik to'lov — ${monthTitle()}</b>\n\n` +
+    `💰 <b>Oylik to'lov — ${monthTitle(scheduledAt)}</b>\n\n` +
     `✅ <b>To'laganlar (${paid.length}):</b>\n${list(paid)}\n\n` +
     `❌ <b>To'lamaganlar (${unpaid.length}):</b>\n${list(unpaid)}` +
     (unpaid.length ? "\n\nIltimos, to'lovni o'z vaqtida amalga oshiring 🙏" : '');

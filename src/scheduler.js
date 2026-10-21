@@ -16,7 +16,7 @@ function plannedJobs(group, now = new Date()) {
     const parts = tashkentParts(day);
     const date = dateKey(day);
     const add = (type, time, key) => {
-      if (now.getTime() >= time && now.getTime() - time < CATCH_UP_MS) jobs.push({ type, date, key });
+      if (now.getTime() >= time && now.getTime() - time < CATCH_UP_MS) jobs.push({ type, date, key, scheduledAt: new Date(time) });
     };
     const at = parseHHMM(group.attendance_time);
     if (group.days.includes(parts.weekday) && at !== null) {
@@ -40,7 +40,7 @@ async function tick(api, now = new Date()) {
       try {
         if (job.type === 'attendance-open') await attendance.sendSheetToAdmins(api, group, job.date, job.key);
         if (job.type === 'attendance-post') await attendance.postReport(api, group, job.date, job.key);
-        if (job.type === 'payment-post') await payments.postReport(api, group, job.key);
+        if (job.type === 'payment-post') await payments.postReport(api, group, job.key, job.scheduledAt);
         if (job.type === 'payment-admin') await payments.sendUnpaidToAdmins(api, group, job.key);
       } catch (error) { console.error(`Rejalashtiruvchi (${job.key}):`, error.description || error.message); }
     }
