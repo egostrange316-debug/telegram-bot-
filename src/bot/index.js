@@ -2,7 +2,7 @@ const { Bot } = require('grammy');
 const config = require('../config');
 const { getSession, clearSession, persistentSession, steps, sendMenu, isAdmin } = require('./common');
 
-function createBot() {
+function createBot(options = {}) {
   const bot = new Bot(config.BOT_TOKEN);
 
   // Student work, credentials and admin editing are private-chat only.
@@ -32,6 +32,7 @@ function createBot() {
   require('./attendance').register(bot);
   require('./payments').register(bot);
   require('./group').register(bot);
+  require('./screenshots').register(bot, options.screenshots);
 
   // Bosqichma-bosqich kiritish (login, javoblar, tahlil, test qo'shish...) — faqat shaxsiy chatda
   bot.on('message', async (ctx) => {

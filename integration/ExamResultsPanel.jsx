@@ -110,6 +110,22 @@ export default function ExamResultsPanel({ apiBase, token }) {
           {data.results.trend.direction && <p style={{ fontWeight: 600 }}>{TREND[data.results.trend.direction]} ({data.results.trend.diff > 0 ? '+' : ''}{data.results.trend.diff}%)</p>}
           {data.results.items.length > 0 ? <LineChart items={data.results.items} exam={exam} /> : <p>Hali natija yo'q.</p>}
           <p style={{fontSize:12,opacity:.7}}>Bandlar mashq uchun taxminiy. Reytingda har bir testning birinchi natijasi hisoblanadi.</p>
+          {data.results.screenshots?.length > 0 && (
+            <>
+              <h3>📷 Skrinshot natijalari</h3>
+              <p style={{fontSize:12,opacity:.7}}>Rasmdan o‘qilgan, o‘quvchi tasdiqlagan ballar. Grafik maksimal ballga nisbatan foizni ko‘rsatadi. Markaz reytingiga qo‘shilmaydi.</p>
+              <LineChart items={data.results.screenshots.slice(-60)} exam="cefr" />
+              <table style={{width:'100%'}}><tbody>
+                {data.results.screenshots.slice(-30).reverse().map(r => (
+                  <tr key={r.id}>
+                    <td>{new Date(r.date).toLocaleDateString('uz-UZ', {timeZone:'Asia/Tashkent'})}</td>
+                    <td>{r.title}<div style={{fontSize:12,opacity:.7}}>{SECTIONS[r.section]}</div></td>
+                    <td style={{textAlign:'right'}}>{r.score_label}</td>
+                  </tr>
+                ))}
+              </tbody></table>
+            </>
+          )}
           <h3>🏆 O'quv markaz reytingi</h3>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <tbody>

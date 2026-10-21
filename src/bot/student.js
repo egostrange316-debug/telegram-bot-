@@ -1,6 +1,7 @@
 const { randomUUID } = require('crypto');
 const { consumeLinkCode, linkAccount } = require('../lib/linking');
 const { allowLogin } = require('../lib/login-limit');
+const { sendReport } = require('../lib/delivery');
 const bcrypt = require('bcryptjs');
 const { InlineKeyboard, InputFile } = require('grammy');
 const config = require('../config');
@@ -343,25 +344,30 @@ async function showResults(ctx, exam) {
   const user = await requireStudent(ctx);
   if (!user) return;
   const r = await userResults(user._id, exam);
-  if (!r.items.length) return ctx.reply(`${EXAM_NAMES[exam]} bo'yicha hali baholangan natija yo'q.`);
+  if (!r.items.length && !r.screenshots.length) return ctx.reply(`${EXAM_NAMES[exam]} bo'yicha hali baholangan natija yo'q.`);
   const lines = [`📊 <b>${EXAM_NAMES[exam]} — natijalaringiz</b>`, ''];
   for (const [s, v] of Object.entries(r.sections)) {
     if (!v.count) continue;
     const extra = exam === 'ielts' ? `, o'rtacha band ${v.average_band}` : '';
     lines.push(`<b>${SECTION_NAMES[s]}</b>: ${v.count} ta test, o'rtacha ${v.average_percent}%${extra} ${v.trend.direction ? TREND_TEXT[v.trend.direction] : ''}`);
   }
-  lines.push('', `Umumiy o'rtacha: <b>${r.average_percent}%</b>`);
+  if (r.items.length) lines.push('', `Bot testlari o'rtachasi: <b>${r.average_percent}%</b>`);
   if (r.trend.direction) lines.push(`${TREND_TEXT[r.trend.direction]} (${r.trend.diff > 0 ? '+' : ''}${r.trend.diff}%)`);
-  lines.push('', '<b>Oxirgi natijalar:</b>');
+  if (r.items.length) lines.push('', '<b>Oxirgi natijalar:</b>');
   for (const it of r.items.slice(-8).reverse()) {
     const sc = exam === 'ielts' ? `band ${it.band}` : it.level || '';
     lines.push(`• ${new Date(it.date).toLocaleDateString('uz-UZ', { timeZone: 'Asia/Tashkent' })} · ${SECTION_NAMES[it.section]} · ${esc(it.title)} — ${it.percent}% (${sc})`);
+  }
+  if (r.screenshots.length) {
+    lines.push('', '<b>📷 Skrinshotdan o‘qilgan natijalar:</b>');
+    for (const it of r.screenshots.slice(-8).reverse()) lines.push(`• ${SECTION_NAMES[it.section]} · ${esc(it.title)} — ${it.score_label}`);
+    lines.push('O‘quvchi tasdiqlagan; markaz reytingiga qo‘shilmaydi.');
   }
   const text = lines.join('\n');
   const png = await renderChart(r);
   if (png && text.length <= 1024) return ctx.replyWithPhoto(new InputFile(png, 'grafik.png'), { caption: text, parse_mode: 'HTML' });
   if (png) await ctx.replyWithPhoto(new InputFile(png, 'grafik.png'));
-  return ctx.reply(text, { parse_mode: 'HTML' });
+  return sendReport(ctx.api, ctx.chat.id, text);
 }
 
 async function showRating(ctx, exam) {

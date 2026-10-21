@@ -132,4 +132,39 @@ const LinkCode = mongoose.model('LinkCode', new mongoose.Schema({
   expires_at: { type: Date, expires: 0 },
 }, { collection: 'bot_link_codes' }));
 
-module.exports = { TgLink, Test, Attempt, GroupChat, JobLog, BotSession, LinkCode };
+// HTML test natijasining skrinshoti: bot testlaridan alohida, tahlil qulfini ochmaydi.
+const ScreenshotResult = mongoose.model('ScreenshotResult', new mongoose.Schema({
+  user: { type: ObjectId, ref: 'User', required: true },
+  telegram_id: { type: Number, required: true },
+  file_id: { type: String, required: true },
+  file_unique_id: { type: String, required: true, unique: true },
+  image_hash: { type: String },
+  exam: { type: String, enum: ['ielts', 'cefr'], required: true },
+  section: { type: String, enum: ['reading', 'listening', 'writing'], required: true },
+  status: { type: String, enum: ['processing', 'draft', 'accepted', 'failed', 'rejected'], required: true },
+  title: String,
+  score_type: { type: String, enum: ['correct', 'points', 'band', 'percent'] },
+  score: Number,
+  maximum: Number,
+  percent: Number,
+  model: String,
+  read_count: { type: Number, default: 1 },
+  submitted_at: { type: Date, required: true },
+  accepted_at: Date,
+  draft_until: Date,
+  report_chats: { type: [Number], default: [] },
+  expires_at: { type: Date, expires: 0 },
+}, { timestamps: true, collection: 'bot_screenshot_results' })
+  .index({ image_hash: 1 }, { unique: true, sparse: true })
+  .index({ user: 1, submitted_at: 1 })
+  .index({ status: 1, accepted_at: 1 }));
+
+// Retry yuborayotgan hisobotning matni va natijalar ro'yxati o'zgarmaydi.
+const AttendanceReport = mongoose.model('AttendanceReport', new mongoose.Schema({
+  key: { type: String, required: true, unique: true },
+  text: { type: String, required: true },
+  result_ids: [{ type: ObjectId, ref: 'ScreenshotResult' }],
+  expires_at: { type: Date, expires: 0 },
+}, { collection: 'bot_attendance_reports' }));
+
+module.exports = { TgLink, Test, Attempt, GroupChat, JobLog, BotSession, LinkCode, ScreenshotResult, AttendanceReport };

@@ -8,6 +8,9 @@ const config = {
   MONGO_URI: process.env.MONGO_URI,
   // Ilovaning JWT_SECRET'i: ilova tokeni bilan bot API'siga kirish uchun (natijalar, grafik, reyting)
   JWT_SECRET: process.env.JWT_SECRET,
+  // ENZO-APP bilan bir xil AI xizmati. Kalit faqat serverda saqlanadi.
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+  GEMINI_SCREENSHOT_MODEL: process.env.GEMINI_SCREENSHOT_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite',
   // Telegram ID'lar (vergul bilan). Ilovada role=admin bo'lgan foydalanuvchi bot orqali kirsa ham admin bo'ladi
   ADMIN_IDS: list(process.env.ADMIN_IDS).map(Number).filter(Number.isFinite),
   PORT: Number(process.env.PORT) || 8080,

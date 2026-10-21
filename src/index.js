@@ -19,6 +19,7 @@ async function main() {
     { command: 'start', description: 'Boshlash / kirish' },
     { command: 'menu', description: 'Asosiy menyu' },
     { command: 'tahlil', description: 'Tugallanmagan tahlil' },
+    { command: 'skrin', description: 'HTML test natijasi skrinshotini yuborish' },
     { command: 'cancel', description: 'Bekor qilish' },
   ]);
   const server = createServer().listen(config.PORT, () => console.log(`API ${config.PORT}-portda`));

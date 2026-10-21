@@ -67,6 +67,7 @@ const BTN = {
   results: '📊 Natijalarim',
   rating: '🏆 Reyting',
   chart: '📈 Grafik',
+  screenshot: '📷 Natija skrinshoti',
   addTest: "➕ Test qo'shish",
   tests: '📚 Testlar',
   writing: '📝 Writing tekshirish',
@@ -79,6 +80,7 @@ function mainMenu({ student, admin }) {
   const kb = new Keyboard();
   if (student) {
     kb.text(BTN.ielts).text(BTN.cefr).row().text(BTN.results).text(BTN.rating).row();
+    kb.text(BTN.screenshot).row();
     if (config.WEBAPP_URL) kb.webApp(BTN.chart, config.WEBAPP_URL).row();
   }
   if (admin) {

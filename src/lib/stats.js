@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
-const { Attempt } = require('../models/bot');
+const { Attempt, ScreenshotResult } = require('../models/bot');
+const { scoreLabel } = require('./screenshot-reader');
 const { User } = require('../models/app');
 
 const SECTION_NAMES = { reading: 'Reading', listening: 'Listening', writing: 'Writing' };
@@ -53,9 +54,16 @@ async function userResults(userId, exam) {
       trend: trend(own.map((i) => i.percent)),
     };
   }
+  const screenshots = await ScreenshotResult.find({ user: userId, exam, status: 'accepted' })
+    .select('exam section title score_type score maximum percent accepted_at').sort({ accepted_at: -1, _id: -1 }).limit(200).lean();
   return {
     exam,
     items,
+    screenshots: screenshots.reverse().map(r => ({
+      id: String(r._id), date: r.accepted_at, title: r.title, section: r.section,
+      score: r.score, maximum: r.maximum, score_type: r.score_type, score_label: scoreLabel(r), percent: r.percent,
+      source: 'screenshot', verified: false,
+    })),
     average_percent: items.length ? round1(avg(items.map((i) => i.percent))) : null,
     trend: trend(items.map((i) => i.percent)),
     sections: bySection,

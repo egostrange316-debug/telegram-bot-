@@ -1,6 +1,8 @@
 const { InlineKeyboard } = require('grammy');
 const { User, Attendance } = require('../models/app');
-const { GroupChat } = require('../models/bot');
+const { GroupChat, ScreenshotResult, AttendanceReport } = require('../models/bot');
+const { scoreLabel } = require('../lib/screenshot-reader');
+const { EXAM_NAMES, SECTION_NAMES } = require('../lib/stats');
 const { dateKey, humanDate } = require('../lib/time');
 const { esc, isAdmin, adminChatIds, actorUserId } = require('./common');
 const { deliverOnce, sendReport } = require('../lib/delivery');
@@ -58,6 +60,35 @@ async function sendSheetToAdmins(api, group, date = dateKey(), key) {
 }
 
 async function postReport(api, group, date = dateKey(), key) {
+  let snapshot = key ? await AttendanceReport.findOne({ key }).lean() : null;
+  if (!snapshot) {
+    const built = await buildReport(group, date);
+    if (key) {
+      try {
+        snapshot = await AttendanceReport.findOneAndUpdate({ key }, { $setOnInsert: {
+          ...built, expires_at: new Date(Date.now() + 14 * 86400_000),
+        } }, { upsert: true, new: true }).lean();
+      } catch (error) {
+        if (error.code !== 11000) throw error;
+        snapshot = await AttendanceReport.findOne({ key }).lean();
+      }
+    } else snapshot = built;
+  }
+  await sendReport(api, group.chat_id, snapshot.text, key);
+  // Results arriving after the snapshot or after today's send remain queued for the next report.
+  if (snapshot.result_ids.length) await ScreenshotResult.updateMany({ _id: { $in: snapshot.result_ids } }, {
+    $addToSet: { report_chats: group.chat_id },
+  });
+}
+
+function screenshotLines(rows, students) {
+  const names = new Map(students.map(s => [String(s._id), s.full_name]));
+  return rows.map((r, i) => `${i + 1}. ${esc(String(names.get(String(r.user)) || 'O‘quvchi').slice(0, 150))}` +
+    ` — ${EXAM_NAMES[r.exam]} ${SECTION_NAMES[r.section]}: <b>${scoreLabel(r)}</b>` +
+    ` · ${esc(r.title)} · ${humanDate(dateKey(new Date(r.accepted_at)))}`).join('\n');
+}
+
+async function buildReport(group, date) {
   const students = await roster(group);
   const m = await marks(students, date);
   const present = students.filter((s) => m.get(String(s._id)) === 'present');
@@ -68,7 +99,12 @@ async function postReport(api, group, date = dateKey(), key) {
     `✅ <b>Kelganlar (${present.length}):</b>\n${list(present)}\n\n` +
     `❌ <b>Kelmaganlar (${absent.length}):</b>\n${list(absent)}`;
   if (unmarked.length) text += `\n\n⬜ <b>Belgilanmagan (${unmarked.length}):</b>\n${list(unmarked)}`;
-  return sendReport(api, group.chat_id, text, key);
+  const results = await ScreenshotResult.find({ user: { $in: students.map(s => s._id) },
+    status: 'accepted', report_chats: { $ne: group.chat_id }, accepted_at: { $lte: new Date() },
+  }).select('user exam section title score_type score maximum accepted_at').sort({ accepted_at: 1, _id: 1 }).lean();
+  if (results.length) text += `\n\n📷 <b>Skrinshot natijalari (${results.length})</b>\n` +
+    'AI rasmdagi ballni o‘qidi; o‘quvchi tasdiqladi.\n' + screenshotLines(results, students);
+  return { text, result_ids: results.map(r => r._id) };
 }
 
 async function refresh(ctx, group, date, page = 0) {
@@ -128,4 +164,4 @@ function register(bot) {
   });
 }
 
-module.exports = { register, roster, sheet, sendSheetToAdmins, postReport, MAX_SHEET };
+module.exports = { register, roster, sheet, sendSheetToAdmins, postReport, buildReport, screenshotLines, MAX_SHEET };

@@ -8,13 +8,22 @@ Bot ilova bilan **bitta MongoDB bazasidan** foydalanadi:
 | `users` | O'quvchilar ro'yxati, login (ism-familiya + parol, ilovadagi bilan bir xil), guruh, obuna/to'lov holati |
 | `attendances` | Davomat belgilari — bot qo'ygan ✅/❌ ilovadagi davomat jadvalida ham ko'rinadi |
 
-Botning o'z kolleksiyalari: `bot_tests`, `bot_attempts`, `bot_tg_links`, `bot_groups`, `bot_job_logs`, `bot_sessions`, `bot_link_codes`.
+Botning o'z kolleksiyalari: `bot_tests`, `bot_attempts`, `bot_tg_links`, `bot_groups`, `bot_job_logs`, `bot_sessions`, `bot_link_codes`, `bot_screenshot_results`, `bot_attendance_reports`.
 
 **Ishga tushirish va ilovaga ulash:** [bosqichma-bosqich yo‘riqnoma](docs/ILOVAGA_ULASH.md). `integration/ExamResultsPanel.jsx` mavjud ilovaning frontendiga qo‘shiladi; bu repoda frontendning o‘zi yo‘q.
 
 1.1 versiyada: barcha bo‘limlar uchun majburiy tahlil, saqlanadigan suhbat bosqichlari, bir martalik akkaunt bog‘lash, katta guruhlar uchun sahifalash, qayta yuborish va MongoDB bilan jarayon testlari qo‘shilgan.
 
 ## Imkoniyatlar
+
+### HTML test natijasi skrinshoti
+- O‘quvchi shaxsiy chatda `/skrin` yoki «📷 Natija skrinshoti»ni bosadi, IELTS/CEFR va Reading/Listening/Writingni tanlaydi, rasm yuboradi. Bo‘sh suhbatga rasm yuborish ham tanlovni ochadi.
+- Gemini rasmdagi **tayyor ballni o‘qiydi**. Bot javoblarni rasm asosida qayta baholamaydi va yo‘q ballni taxmin qilmaydi. JPG/PNG/WEBP, 6 MB gacha; 24 soatda 10 ta AI urinish.
+- O‘quvchi o‘qilgan ballni 30 daqiqa ichida tasdiqlaydi. Natija botdagi bog‘langan akkauntga yoziladi; ism rasm ichidan olinmaydi.
+- Tasdiqlangan natijalar shu o‘quvchining guruhiga navbatdagi **davomat hisoboti bilan birga** yuboriladi. Davomatdagi ✅/❌ faqat admin belgisidan olinadi. Kech yuborilgan natija keyingi hisobotga qoladi.
+- Natijalar Mini App va React komponentida alohida tarix/foiz grafigida ko‘rinadi. Skrinshot haqiqiyligi tasdiqlanmagani sabab markaz reytingiga qo‘shilmaydi, bot testlarining tahlil qulfini ochmaydi.
+- `GEMINI_API_KEY` va `GEMINI_SCREENSHOT_MODEL` serverda sozlanadi. Kalit yo‘q yoki xizmat ishlamasa, soxta natija yozilmaydi. Bu xizmat ENZO-APP’dagi Gemini tanloviga mos; OpenAI kaliti talab qilinmaydi.
+- Shu rasmning Telegram IDsi va fayl xeshi takrorni ushlaydi; o‘zgartirilgan/qirqilgan skrinshot haqiqiyligini kafolatlamaydi. To‘liq HTML fayli va namunaviy skrinshot bilan jonli qabul sinovi hali kerak.
 
 ### 1. IELTS va CEFR bo'limlari
 - Har birida 3 bo'lim: **Reading, Listening, Writing**.
@@ -70,6 +79,7 @@ Mini App uchun `WEBAPP_URL` HTTPS bo'lishi kerak (masalan Render/Railway domeni 
 | Qayerda | Buyruq | Tavsif |
 |---|---|---|
 | shaxsiy | `/start`, `/login`, `/menu`, `/cancel` | Kirish, menyu, bekor qilish |
+| shaxsiy | `/skrin` | HTML test natijasi skrinshotini o‘qish va tasdiqlash |
 | shaxsiy (admin) | `/statistika` | O'quvchilar, testlar, tekshirilmagan Writing soni |
 | guruh (admin) | `/ulash [guruh]`, `/uzish`, `/sozlamalar` | Guruhni ulash/uzish |
 | guruh (admin) | `/davomat_vaqti HH:MM`, `/dars_kunlari 1,3,5` | Davomat sozlamalari |

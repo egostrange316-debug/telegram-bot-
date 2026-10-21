@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const config = require('../src/config');
 const { User, Attendance } = require('../src/models/app');
-const { TgLink, Test, Attempt, GroupChat, JobLog, BotSession, LinkCode } = require('../src/models/bot');
+const { TgLink, Test, Attempt, GroupChat, JobLog, BotSession, LinkCode, ScreenshotResult } = require('../src/models/bot');
 const { createBot } = require('../src/bot');
 const { createServer } = require('../src/api/server');
 const { sectionState } = require('../src/bot/tests');
@@ -16,6 +16,7 @@ const { userResults, leaderboard } = require('../src/lib/stats');
 const { issueLinkCode } = require('../src/lib/linking');
 const { tick } = require('../src/scheduler');
 const { sessions } = require('../src/bot/common');
+const { ScreenshotError } = require('../src/lib/screenshot-reader');
 let mongo, server, base, sequence = 1;
 
 before(async () => {
@@ -47,8 +48,8 @@ beforeEach(async () => {
   sessions.clear();
 });
 
-function harness(fail) {
-  const bot = createBot(), calls = [];
+function harness(fail, screenshots) {
+  const bot = createBot({ screenshots }), calls = [];
   bot.botInfo = { id: 123456789, is_bot: true, first_name: 'Test', username: 'enzo_test_bot' };
   bot.api.config.use(async (prev, method, payload) => {
     calls.push({ method, payload });
@@ -92,6 +93,86 @@ async function answer(h, testDoc, text = '1-A 2-C') {
 }
 const token = (user) => jwt.sign({ id: String(user._id) }, config.JWT_SECRET, { expiresIn: '1h' });
 const request = (path, user, options = {}) => fetch(base + path, { ...options, headers: { ...(user ? { Authorization: `Bearer ${token(user)}` } : {}), ...options.headers } });
+
+test('Screenshot confirmation is owned, idempotent, visible in API and cannot unlock analysis', async t => {
+  const original = config.GEMINI_API_KEY;
+  config.GEMINI_API_KEY = 'test-only-fake-key';
+  t.after(() => { config.GEMINI_API_KEY = original; });
+  const user = await student(); await student('Vali', 200);
+  const first = await exam();
+  await Attempt.create({ user: user._id, test: first._id, exam: 'ielts', section: 'reading', status: 'analysis', pending: true, percent: 50 });
+  let calls = 0;
+  const h = harness(null, {
+    downloadScreenshot: async () => ({ bytes: Buffer.from('test-image'), mime: 'image/png' }),
+    readScreenshot: async () => { calls++; return { title: 'HTML mock 1', score_type: 'correct', score: 32, maximum: 40, percent: 80, model: 'mock' }; },
+  });
+  await h.msg(100, '/skrin');
+  await h.cb(100, 'ss:ielts:reading');
+  await h.msg(100, null, { photo: [{ file_id: 'image1', file_unique_id: 'image1', file_size: 100 }] });
+  const row = await ScreenshotResult.findOne();
+  assert.equal(row.status, 'draft');
+  assert.equal(calls, 1);
+  await h.cb(200, `ssok:${row._id}`);
+  assert.equal((await ScreenshotResult.findById(row._id)).status, 'draft');
+  await h.cb(100, `ssok:${row._id}`);
+  await h.cb(100, `ssok:${row._id}`);
+  assert.equal(await ScreenshotResult.countDocuments({ status: 'accepted' }), 1);
+  assert.equal((await Attempt.findOne()).pending, true);
+  assert.equal(await Attempt.countDocuments(), 1);
+  const out = await (await request('/api/exams/results?exam=ielts', user)).json();
+  assert.equal(out.screenshots[0].score_label, '32/40');
+  assert.equal(out.screenshots[0].verified, false);
+  assert.equal(out.screenshots[0].file_id, undefined);
+  assert.equal(out.screenshots[0].telegram_id, undefined);
+  await h.msg(100, '/skrin'); await h.cb(100, 'ss:ielts:reading');
+  await h.msg(100, null, { photo: [{ file_id: 'image1', file_unique_id: 'image1' }] });
+  assert.equal(calls, 1);
+});
+
+test('Screenshot AI failure creates no published score or altered attendance', async t => {
+  const original = config.GEMINI_API_KEY;
+  config.GEMINI_API_KEY = 'test-only-fake-key';
+  t.after(() => { config.GEMINI_API_KEY = original; });
+  await student();
+  const h = harness(null, {
+    downloadScreenshot: async () => ({ bytes: Buffer.from('unreadable-image'), mime: 'image/png' }),
+    readScreenshot: async () => { throw new ScreenshotError('unreadable', 'Rasm noaniq'); },
+  });
+  await h.msg(100, '/skrin'); await h.cb(100, 'ss:cefr:writing');
+  await h.msg(100, null, { photo: [{ file_id: 'bad', file_unique_id: 'bad' }] });
+  assert.equal(await ScreenshotResult.countDocuments({ status: 'accepted' }), 0);
+  assert.equal((await ScreenshotResult.findOne()).status, 'failed');
+  assert.equal(await Attendance.countDocuments(), 0);
+  assert.ok(h.calls.some(c => c.payload.text === 'Rasm noaniq'));
+});
+
+test('Attendance report freezes retries, includes only its group, queues late screenshots', async () => {
+  const user = await student(), other = await student('Other group', 200);
+  await User.updateOne({ _id: other._id }, { $set: { group_name: '2-guruh' } });
+  const group = await GroupChat.create({ chat_id: -444, group_name: '1-guruh' });
+  const makeResult = (u, id, title) => ScreenshotResult.create({
+    user: u._id, telegram_id: u === user ? 100 : 200, file_id: id, file_unique_id: id,
+    exam: 'ielts', section: 'reading', status: 'accepted', title, score_type: 'correct', score: 0, maximum: 40, percent: 0,
+    submitted_at: new Date(Date.now() - 1000), accepted_at: new Date(Date.now() - 500),
+  });
+  const initial = await makeResult(user, 'initial', 'Initial result');
+  await makeResult(other, 'foreign', 'Foreign result');
+  await assert.rejects(attendance.postReport({ sendMessage: async () => { throw Error('offline'); } }, group, '2026-10-21', 'screenshot-report-1'));
+  assert.deepEqual((await ScreenshotResult.findById(initial._id)).report_chats, []);
+  const late = await makeResult(user, 'late', 'Late result');
+  const sent = [];
+  const api = { sendMessage: async (chat, text) => { sent.push({ chat, text }); } };
+  await attendance.postReport(api, group, '2026-10-21', 'screenshot-report-1');
+  assert.match(sent[0].text, /Initial result/);
+  assert.doesNotMatch(sent[0].text, /Foreign result|Late result/);
+  assert.deepEqual((await ScreenshotResult.findById(initial._id)).report_chats, [-444]);
+  assert.deepEqual((await ScreenshotResult.findById(late._id)).report_chats, []);
+  await attendance.postReport(api, group, '2026-10-22', 'screenshot-report-2');
+  assert.match(sent[1].text, /Late result/);
+  assert.doesNotMatch(sent[1].text, /Initial result|Foreign result/);
+  await attendance.postReport(api, group, '2026-10-22', 'screenshot-report-2');
+  assert.equal(sent.length, 2);
+});
 
 test('Reading → mandatory analysis → next test, including all sections and duplicate submit', async () => {
   const user = await student();
