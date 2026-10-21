@@ -44,17 +44,38 @@ export default function ExamResultsPanel({ apiBase, token }) {
   const [exam, setExam] = useState('ielts');
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [revision, refresh] = useState(0);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linking, setLinking] = useState(false);
+  const base = apiBase.replace(/\/$/, '');
+  async function connectTelegram() {
+    setLinking(true);
+    setError(null);
+    try {
+      const response = await fetch(`${base}/api/telegram/link`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) throw new Error('Botga ulanish havolasi olinmadi');
+      const body = await response.json();
+      setLinkUrl(body.url);
+    } catch (e) { setError(e.message); }
+    finally { setLinking(false); }
+  }
+  useEffect(() => {
+    const timer = setInterval(() => { if (!document.hidden) refresh(v => v + 1); }, 30000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => { setLinkUrl(''); }, [token, apiBase]);
 
   useEffect(() => {
     let alive = true;
+    const controller = new AbortController();
     setData(null);
     setError(null);
-    const get = (p) => fetch(`${apiBase}${p}`, { headers: { Authorization: `Bearer ${token}` } }).then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
+    const get = (p) => fetch(`${base}${p}`, { signal: controller.signal, cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }).then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
     Promise.all([get(`/api/exams/results?exam=${exam}`), get(`/api/exams/leaderboard?exam=${exam}`)])
       .then(([results, board]) => alive && setData({ results, board }))
       .catch(() => alive && setError("Natijalar yuklanmadi"));
-    return () => { alive = false; };
-  }, [apiBase, token, exam]);
+    return () => { alive = false; controller.abort(); };
+  }, [base, token, exam, revision]);
 
   return (
     <div style={{ padding: 16 }}>
@@ -65,7 +86,12 @@ export default function ExamResultsPanel({ apiBase, token }) {
           </button>
         ))}
       </div>
-      {error && <p>{error}</p>}
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+        <button onClick={() => refresh(v => v + 1)}>↻ Yangilash</button>
+        <button disabled={linking} onClick={connectTelegram}>{linking ? 'Tayyorlanmoqda…' : 'Telegramga ulash'}</button>
+        {linkUrl && <a href={linkUrl} target="_blank" rel="noopener noreferrer">Botni ochish (5 daqiqa)</a>}
+      </div>
+      {error && <p role="alert">{error}</p>}
       {!data && !error && <p>Yuklanmoqda…</p>}
       {data && (
         <>
@@ -76,13 +102,14 @@ export default function ExamResultsPanel({ apiBase, token }) {
                 <div key={s} style={{ padding: 10, borderRadius: 12, background: 'rgba(127,127,127,.1)' }}>
                   <div style={{ fontSize: 12, opacity: 0.7 }}>{SECTIONS[s]}</div>
                   <div style={{ fontSize: 20, fontWeight: 700 }}>{v.count ? (exam === 'ielts' ? v.average_band : `${v.average_percent}%`) : '—'}</div>
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>{v.count} test</div>
+                  <div style={{ fontSize: 12, opacity: 0.7 }}>{v.count} test · {TREND[v.trend.direction] || '—'}</div>
                 </div>
               );
             })}
           </div>
           {data.results.trend.direction && <p style={{ fontWeight: 600 }}>{TREND[data.results.trend.direction]} ({data.results.trend.diff > 0 ? '+' : ''}{data.results.trend.diff}%)</p>}
           {data.results.items.length > 0 ? <LineChart items={data.results.items} exam={exam} /> : <p>Hali natija yo'q.</p>}
+          <p style={{fontSize:12,opacity:.7}}>Bandlar mashq uchun taxminiy. Reytingda har bir testning birinchi natijasi hisoblanadi.</p>
           <h3>🏆 O'quv markaz reytingi</h3>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <tbody>

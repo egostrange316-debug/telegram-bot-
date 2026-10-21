@@ -1,3 +1,6 @@
+const { randomUUID } = require('crypto');
+const { consumeLinkCode, linkAccount } = require('../lib/linking');
+const { allowLogin } = require('../lib/login-limit');
 const bcrypt = require('bcryptjs');
 const { InlineKeyboard, InputFile } = require('grammy');
 const config = require('../config');
@@ -5,7 +8,7 @@ const { User } = require('../models/app');
 const { TgLink, Test, Attempt } = require('../models/bot');
 const { parseAnswers, grade, ieltsBand, cefrLevel } = require('../lib/grading');
 const { userResults, leaderboard, chartConfig, SECTION_NAMES, EXAM_NAMES, TREND_TEXT } = require('../lib/stats');
-const { sectionState, STATE_ICON } = require('./tests');
+const { sectionState, canStart, STATE_ICON } = require('./tests');
 const {
   getSession, setSession, clearSession, steps, esc, linkedUser, isAdmin, adminChatIds,
   BTN, sendMenu, sendMaterial, materialFromMessage, safeSend,
@@ -17,7 +20,16 @@ const cancelKb = new InlineKeyboard().text('✖️ Bekor qilish', 'cancel');
 
 async function start(ctx) {
   if (ctx.chat.type !== 'private') return;
-  clearSession(ctx.from.id);
+  if (String(ctx.match || '').startsWith('link_')) {
+    const code = await consumeLinkCode(ctx.match.slice(5));
+    if (!code || !(await User.exists({ _id: code.user }))) return ctx.reply('Ulash havolasi eskirgan. Ilovadan yangisini oling.');
+    await linkAccount(ctx.from.id, code.user, ctx.from.username);
+    clearSession(ctx.from.id);
+    return sendMenu(ctx, '✅ Ilova akkauntingiz botga ulandi.');
+  }
+  if (getSession(ctx.from.id)) {
+    return ctx.reply('Boshlangan ish saqlangan. Oxirgi so‘ralgan matn yoki faylni yuborib davom eting. Bekor qilish: /cancel');
+  }
   const user = await linkedUser(ctx.from.id);
   if (user) return sendMenu(ctx, `Assalomu alaykum, <b>${esc(user.full_name)}</b>! 👋`);
   if (await isAdmin(ctx.from.id)) {
@@ -46,14 +58,14 @@ steps.login_name = async (ctx, s) => {
 steps.login_password = async (ctx, s) => {
   const password = ctx.message.text || '';
   await ctx.deleteMessage().catch(() => {});
+  if (!allowLogin(ctx.from.id, User.nameKey(s.name))) return ctx.reply('Ko‘p urinish bo‘ldi. 15 daqiqadan keyin qayta urinib ko‘ring yoki ilovadagi «Telegramga ulash»dan foydalaning.');
   const user = await User.findOne({ name_key: User.nameKey(s.name) }).lean();
   const ok = user && user.password_hash && (await bcrypt.compare(password, user.password_hash));
   if (!ok) {
     setSession(ctx.from.id, { step: 'login_name' });
     return ctx.reply("❌ Ism yoki parol noto'g'ri. Ism-familiyangizni qaytadan yozing:");
   }
-  await TgLink.deleteMany({ $or: [{ telegram_id: ctx.from.id }, { user: user._id }] });
-  await TgLink.create({ telegram_id: ctx.from.id, user: user._id, username: ctx.from.username });
+  await linkAccount(ctx.from.id, user._id, ctx.from.username);
   clearSession(ctx.from.id);
   return sendMenu(ctx, `✅ Xush kelibsiz, <b>${esc(user.full_name)}</b>!`);
 };
@@ -88,16 +100,21 @@ async function showExam(ctx, exam) {
   return ctx.reply(`<b>${EXAM_NAMES[exam]}</b> — bo'limni tanlang:`, { parse_mode: 'HTML', reply_markup: sectionsKb(exam) });
 }
 
-async function showSection(ctx, exam, section, asNew = false) {
+async function showSection(ctx, exam, section, asNew = false, requestedPage = 0) {
   const user = await requireStudent(ctx);
   if (!user) return;
   const out = (text, other) => (asNew ? ctx.reply(text, other) : ctx.editMessageText(text, other));
-  const { rows } = await sectionState(user._id, exam, section);
+  const { rows, pending } = await sectionState(user._id, exam, section);
   const title = `<b>${EXAM_NAMES[exam]} · ${SECTION_NAMES[section]}</b>`;
   if (!rows.length) return out(`${title}\n\nHozircha test joylanmagan.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Orqaga', `ex:${exam}`) });
   const kb = new InlineKeyboard();
-  rows.forEach((r, i) => kb.text(`${STATE_ICON[r.state]} ${i + 1}. ${r.test.title}`.slice(0, 60), `t:${r.test._id}`).row());
-  kb.text('⬅️ Orqaga', `ex:${exam}`);
+  if (pending?.status === 'analysis') kb.text('🧠 Tugallanmagan tahlil', `an:${pending._id}`).row();
+  const pages = Math.max(1, Math.ceil(rows.length / 40));
+  const page = Math.min(Math.max(0, requestedPage), pages - 1);
+  rows.slice(page * 40, (page + 1) * 40).forEach((r, i) => kb.text(`${STATE_ICON[r.state]} ${page * 40 + i + 1}. ${r.test.title}`.slice(0, 60), `t:${r.test._id}`).row());
+  if (page > 0) kb.text('⬅️', `sp:${exam}:${section}:${page - 1}`);
+  if (page + 1 < pages) kb.text('➡️', `sp:${exam}:${section}:${page + 1}`);
+  kb.row().text('⬅️ Orqaga', `ex:${exam}`);
   const legend = '✅ ishlangan · 🔓 ochiq · 🧠 tahlil kerak · ⏳ tekshirilmoqda · 🔒 yopiq';
   return out(`${title}\n\n${legend}`, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -107,7 +124,7 @@ async function showTest(ctx, testId) {
   if (!user) return;
   const test = await Test.findById(testId).lean();
   if (!test || !test.active) return ctx.answerCallbackQuery({ text: 'Test topilmadi', show_alert: true });
-  const { rows } = await sectionState(user._id, test.exam, test.section);
+  const { rows, pending } = await sectionState(user._id, test.exam, test.section);
   const row = rows.find((r) => String(r.test._id) === String(testId));
   if (!row) return ctx.answerCallbackQuery({ text: 'Test topilmadi', show_alert: true });
 
@@ -135,16 +152,16 @@ async function startTest(ctx, testId) {
   if (!user) return;
   const test = await Test.findById(testId).lean();
   if (!test || !test.active) return ctx.answerCallbackQuery({ text: 'Test topilmadi', show_alert: true });
-  const { rows } = await sectionState(user._id, test.exam, test.section);
+  const { rows, pending } = await sectionState(user._id, test.exam, test.section);
   const row = rows.find((r) => String(r.test._id) === String(testId));
   if (!row || !['open', 'done'].includes(row.state)) {
     return ctx.answerCallbackQuery({ text: '🔒 Bu testni hozir boshlab bo\'lmaydi.', show_alert: true });
   }
   await ctx.answerCallbackQuery();
   await ctx.reply(`📝 <b>${esc(test.title)}</b> boshlandi. Materiallar:`, { parse_mode: 'HTML' });
-  for (const m of test.materials) await safeSend(() => sendMaterial(ctx.api, ctx.chat.id, m));
+  for (const m of test.materials) await sendMaterial(ctx.api, ctx.chat.id, m);
 
-  setSession(ctx.from.id, { step: test.section === 'writing' ? 'writing' : 'answers', testId: String(test._id) });
+  setSession(ctx.from.id, { step: test.section === 'writing' ? 'writing' : 'answers', testId: String(test._id), submissionId: randomUUID() });
   if (test.section === 'writing') {
     return ctx.reply('✍️ Inshoingizni <b>matn</b> qilib yoki <b>rasm/fayl</b> ko\'rinishida yuboring.', { parse_mode: 'HTML', reply_markup: cancelKb });
   }
@@ -159,12 +176,13 @@ steps.answers = async (ctx, s) => {
   const text = ctx.message.text;
   if (!text) return ctx.reply('Javoblarni matn ko\'rinishida yuboring.');
   const test = await Test.findById(s.testId).lean();
-  if (!test) { clearSession(ctx.from.id); return ctx.reply('Test topilmadi.'); }
-  const answers = parseAnswers(text).slice(0, test.answer_key.length);
+  if (!test?.active) { clearSession(ctx.from.id); return ctx.reply('Test topilmadi.'); }
+  const answers = parseAnswers(text);
+  if (answers.length > test.answer_key.length) return ctx.reply('Javoblar soni test savollaridan ko‘p. Raqamlarni tekshiring.');
   const filled = answers.filter(Boolean).length;
   if (!filled) return ctx.reply("Javob topilmadi. Masalan: <code>1-A 2-B 3-C</code>", { parse_mode: 'HTML' });
   setSession(ctx.from.id, { ...s, step: 'answers_confirm', answers });
-  const preview = answers.map((a, i) => `${i + 1}) ${a || '—'}`).join('\n');
+  const preview = answers.map((a, i) => `${i + 1}) ${(a || '—').slice(0, 50)}`).join('\n').slice(0, 1800);
   const warn = filled < test.answer_key.length ? `\n\n⚠️ ${test.answer_key.length - filled} ta savolga javob yo'q — ular xato hisoblanadi.` : '';
   return ctx.reply(`Javoblaringiz:\n<pre>${esc(preview)}</pre>${warn}\n\nTekshirilsinmi?`, {
     parse_mode: 'HTML',
@@ -181,32 +199,33 @@ async function submitAnswers(ctx) {
   const user = await linkedUser(ctx.from.id);
   const test = await Test.findById(s.testId).lean();
   if (!user || !test) { clearSession(ctx.from.id); return ctx.answerCallbackQuery({ text: 'Test topilmadi' }); }
-  // Ikki marta bosilsa ikkita natija yozilmasin: bosqichni darhol almashtiramiz
-  clearSession(ctx.from.id);
+  if (!(await canStart(user._id, test))) {
+    clearSession(ctx.from.id);
+    return ctx.answerCallbackQuery({ text: 'Avval oldingi test tahlilini tugating.', show_alert: true });
+  }
   await ctx.answerCallbackQuery();
   await ctx.editMessageReplyMarkup().catch(() => {});
 
   const r = grade(test.answer_key, s.answers);
   const doc = {
     user: user._id, test: test._id, exam: test.exam, section: test.section,
-    status: r.mistakes.length ? 'analysis' : 'done',
+    status: 'analysis', pending: true, submission_id: s.submissionId || randomUUID(),
     correct: r.correct, total: r.total, percent: r.percent, answers: s.answers, mistakes: r.mistakes,
-    finished_at: r.mistakes.length ? undefined : new Date(),
   };
   if (test.exam === 'ielts') doc.band = ieltsBand(test.section, r.correct, r.total);
   else doc.level = cefrLevel(r.percent);
   const attempt = await Attempt.create(doc);
+  clearSession(ctx.from.id);
 
   const scoreLine = test.exam === 'ielts' ? `Band (taxminiy): <b>${doc.band}</b>` : `Daraja (taxminiy): <b>${doc.level}</b>`;
   await ctx.reply(
     `📊 <b>Natija: ${r.correct}/${r.total}</b> (${r.percent}%)\n${scoreLine}\n\n` +
       (r.mistakes.length
         ? `❗ Sizda <b>${r.mistakes.length} ta xato</b>. Keyingi test ochilishi uchun har bir xatoni <b>tahlil qilishingiz shart</b>.`
-        : '🎉 Xatosiz! Keyingi test ochildi.'),
+        : '🎉 Xatosiz! Keyingi test uchun qisqa yakuniy tahlil yozing.'),
     { parse_mode: 'HTML' }
   );
-  if (r.mistakes.length) return beginAnalysis(ctx, String(attempt._id));
-  return null;
+  return beginAnalysis(ctx, String(attempt._id));
 }
 
 /* ------------------------------ Writing topshirish ------------------------------ */
@@ -218,11 +237,15 @@ steps.writing = async (ctx, s) => {
   const user = await linkedUser(ctx.from.id);
   const test = await Test.findById(s.testId).lean();
   if (!user || !test) { clearSession(ctx.from.id); return ctx.reply('Test topilmadi.'); }
-  clearSession(ctx.from.id);
+  if (!(await canStart(user._id, test))) {
+    clearSession(ctx.from.id);
+    return ctx.reply('Avval oldingi test tahlilini tugating.');
+  }
   const attempt = await Attempt.create({
-    user: user._id, test: test._id, exam: test.exam, section: 'writing', status: 'grading',
+    user: user._id, test: test._id, exam: test.exam, section: 'writing', status: 'grading', pending: true, submission_id: s.submissionId || randomUUID(),
     max_score: test.max_score, writing: { kind: m.kind, text: m.text, file_id: m.file_id },
   });
+  clearSession(ctx.from.id);
   await ctx.reply("✅ Inshoingiz qabul qilindi va o'qituvchiga yuborildi. Baho chiqqach xabar beramiz.");
   const admins = await adminChatIds();
   for (const id of admins) {
@@ -241,8 +264,8 @@ async function beginAnalysis(ctx, attemptId) {
   if (!user || !a || String(a.user) !== String(user._id)) return ctx.reply('Tahlil topilmadi.');
   if (a.status === 'done') return ctx.reply('✅ Bu test tahlil qilingan.');
   if (a.status !== 'analysis') return ctx.reply('⏳ Bu ish hali tekshirilmoqda.');
-  if (a.section !== 'writing' && a.mistakes.every((m) => m.analysis)) {
-    await Attempt.updateOne({ _id: a._id, status: 'analysis' }, { $set: { status: 'done', finished_at: new Date() } });
+  if (a.section !== 'writing' && a.mistakes.length && a.mistakes.every((m) => m.analysis)) {
+    await Attempt.updateOne({ _id: a._id, status: 'analysis' }, { $set: { status: 'done', pending: false, finished_at: new Date() } });
     return ctx.reply('✅ Bu test tahlil qilingan. Keyingi test ochiq 🔓');
   }
   setSession(ctx.from.id, { step: 'analysis', attemptId: String(a._id) });
@@ -250,6 +273,9 @@ async function beginAnalysis(ctx, attemptId) {
 }
 
 async function askNextAnalysis(ctx, a) {
+  if (a.section !== 'writing' && !a.mistakes.length) {
+    return ctx.reply(`🧠 Xatosiz test tahlili: qaysi savol qiyin bo‘ldi, javobni qanday topdingiz va nimani o‘rgandingiz? Kamida ${config.MIN_ANALYSIS_CHARS} belgi yozing.`);
+  }
   if (a.section === 'writing') {
     return ctx.reply(
       `🧠 <b>Tahlil — ${esc(a.test?.title || 'Writing')}</b>\n\nO'qituvchi izohi:\n<i>${esc(a.feedback || '—')}</i>\n\n` +
@@ -273,10 +299,11 @@ steps.analysis = async (ctx, s) => {
     return ctx.reply(`Tahlil juda qisqa — kamida ${config.MIN_ANALYSIS_CHARS} belgi yozing. Xatoingizni chin dildan tahlil qiling 🙂`);
   }
   const a = await Attempt.findById(s.attemptId).populate('test', 'title').lean();
-  if (!a || a.status !== 'analysis') { clearSession(ctx.from.id); return ctx.reply('Tahlil topilmadi.'); }
+  const user = await linkedUser(ctx.from.id);
+  if (!user || !a || String(a.user) !== String(user._id) || a.status !== 'analysis') { clearSession(ctx.from.id); return ctx.reply('Tahlil topilmadi.'); }
 
-  if (a.section === 'writing') {
-    await Attempt.updateOne({ _id: a._id, status: 'analysis' }, { $set: { analysis: text, status: 'done', finished_at: new Date() } });
+  if (a.section === 'writing' || !a.mistakes.length) {
+    await Attempt.updateOne({ _id: a._id, status: 'analysis' }, { $set: { analysis: text, status: 'done', pending: false, finished_at: new Date() } });
   } else {
     const idx = a.mistakes.findIndex((m) => !m.analysis);
     if (idx !== -1) {
@@ -284,7 +311,7 @@ steps.analysis = async (ctx, s) => {
       a.mistakes[idx].analysis = text;
       if (a.mistakes.some((m) => !m.analysis)) return askNextAnalysis(ctx, a);
     }
-    await Attempt.updateOne({ _id: a._id, status: 'analysis' }, { $set: { status: 'done', finished_at: new Date() } });
+    await Attempt.updateOne({ _id: a._id, status: 'analysis' }, { $set: { status: 'done', pending: false, finished_at: new Date() } });
   }
   clearSession(ctx.from.id);
   return ctx.reply('✅ Tahlil yakunlandi! Barakalla. Keyingi test ochildi 🔓', {
@@ -359,6 +386,13 @@ const examPickKb = (prefix) => new InlineKeyboard().text('🇬🇧 IELTS', `${pr
 function register(bot) {
   bot.command('start', start);
   bot.command('login', askLogin);
+  bot.command('tahlil', async (ctx) => {
+    const user = await requireStudent(ctx);
+    if (!user) return null;
+    const pending = await Attempt.findOne({ user: user._id, status: { $in: ['analysis', 'grading'] } }).sort({ createdAt: 1 }).lean();
+    if (!pending) return ctx.reply('✅ Tugallanmagan tahlil yo‘q.');
+    return beginAnalysis(ctx, String(pending._id));
+  });
   bot.command('menu', (ctx) => ctx.chat.type === 'private' && sendMenu(ctx));
   bot.hears(BTN.logout, logout);
   bot.hears(BTN.ielts, (ctx) => showExam(ctx, 'ielts'));
@@ -380,12 +414,16 @@ function register(bot) {
     await ctx.answerCallbackQuery();
     return showSection(ctx, ctx.match[1], ctx.match[2], true);
   });
+  bot.callbackQuery(/^sp:(ielts|cefr):(reading|listening|writing):(\d{1,5})$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    return showSection(ctx, ctx.match[1], ctx.match[2], false, Number(ctx.match[3]));
+  });
   bot.callbackQuery(/^t:([a-f\d]{24})$/, (ctx) => showTest(ctx, ctx.match[1]));
   bot.callbackQuery(/^st:([a-f\d]{24})$/, (ctx) => startTest(ctx, ctx.match[1]));
   bot.callbackQuery('ans:ok', submitAnswers);
   bot.callbackQuery('ans:redo', async (ctx) => {
     const s = getSession(ctx.from.id);
-    if (s && s.step === 'answers_confirm') setSession(ctx.from.id, { step: 'answers', testId: s.testId });
+    if (s && s.step === 'answers_confirm') setSession(ctx.from.id, { ...s, step: 'answers' });
     await ctx.answerCallbackQuery();
     await ctx.editMessageReplyMarkup().catch(() => {});
     return ctx.reply('Javoblaringizni qaytadan yuboring:');

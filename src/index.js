@@ -5,39 +5,42 @@ const { createServer } = require('./api/server');
 const { startScheduler } = require('./scheduler');
 
 async function main() {
-  if (!config.BOT_TOKEN) throw new Error('BOT_TOKEN .env faylida yo\'q');
-  if (!config.MONGO_URI) throw new Error("MONGO_URI .env faylida yo'q (ilova bilan bir xil baza bo'lishi kerak)");
-  if (!config.ADMIN_IDS.length) console.warn("Ogohlantirish: ADMIN_IDS bo'sh — admin faqat ilovadagi admin login qilganda bo'ladi");
-
-  await mongoose.connect(config.MONGO_URI);
-  console.log('MongoDB ulandi');
-
+  if (!config.BOT_TOKEN) throw new Error("BOT_TOKEN .env faylida yo'q");
+  if (!config.MONGO_URI) throw new Error("MONGO_URI .env faylida yo'q");
+  if (!config.JWT_SECRET) throw new Error("JWT_SECRET ilova bilan bir xil bo'lishi kerak");
+  if (!config.ADMIN_IDS.length) console.warn("ADMIN_IDS bo'sh: admin ilova akkaunti bilan kirishi kerak");
+  await mongoose.connect(config.MONGO_URI, { serverSelectionTimeoutMS: 10_000 });
+  // Await unique indexes before accepting updates or running scheduled jobs.
+  for (const model of Object.values(mongoose.models)) await model.init();
   const bot = createBot();
+  await bot.init();
+  config.BOT_USERNAME = bot.botInfo.username;
   await bot.api.setMyCommands([
     { command: 'start', description: 'Boshlash / kirish' },
     { command: 'menu', description: 'Asosiy menyu' },
+    { command: 'tahlil', description: 'Tugallanmagan tahlil' },
     { command: 'cancel', description: 'Bekor qilish' },
   ]);
-
-  createServer().listen(config.PORT, () => console.log(`API ${config.PORT}-portda`));
+  const server = createServer().listen(config.PORT, () => console.log(`API ${config.PORT}-portda`));
+  server.on('error', (error) => { console.error('HTTP server:', error.message); process.exit(1); });
   const timer = startScheduler(bot.api);
-
+  let stopping = false;
   const stop = async () => {
+    if (stopping) return;
+    stopping = true;
     clearInterval(timer);
-    await bot.stop();
+    const timeout = setTimeout(() => process.exit(1), 10_000).unref();
+    if (bot.isRunning()) await bot.stop();
+    await new Promise((resolve) => server.close(resolve));
     await mongoose.disconnect();
+    clearTimeout(timeout);
     process.exit(0);
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
-
   await bot.start({
     allowed_updates: ['message', 'callback_query', 'my_chat_member'],
     onStart: (me) => console.log(`Bot ishga tushdi: @${me.username}`),
   });
 }
-
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main().catch((error) => { console.error('Ishga tushmadi:', error.message); process.exit(1); });

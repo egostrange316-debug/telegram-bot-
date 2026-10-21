@@ -30,6 +30,8 @@ const attendanceSchema = new mongoose.Schema(
 );
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
+attendanceSchema.index({ user: 1, date: 1 }, { unique: true });
+attendanceSchema.index({ date: 1 });
 const Attendance = mongoose.models.Attendance || mongoose.model('Attendance', attendanceSchema);
 
 /** Ilovadagi bilan bir xil: kichik harf, bo'shliqlar birlashtirilgan */

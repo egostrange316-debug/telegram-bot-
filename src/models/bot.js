@@ -7,11 +7,11 @@ const TgLink = mongoose.model(
   new mongoose.Schema(
     {
       telegram_id: { type: Number, required: true, unique: true },
-      user: { type: ObjectId, ref: 'User', required: true, index: true },
+      user: { type: ObjectId, ref: 'User', required: true },
       username: String,
     },
     { timestamps: true, collection: 'bot_tg_links' }
-  )
+  ).index({ user: 1 }, { unique: true, name: 'one_telegram_account_per_user' })
 );
 
 /**
@@ -58,6 +58,8 @@ const Attempt = mongoose.model(
       exam: { type: String, enum: ['ielts', 'cefr'], required: true },
       section: { type: String, enum: ['reading', 'listening', 'writing'], required: true },
       status: { type: String, enum: ['grading', 'analysis', 'done'], required: true },
+      submission_id: { type: String },
+      pending: { type: Boolean, default: false },
       correct: Number,
       total: Number,
       score: Number, // Writing balli (IELTS band yoki CEFR ball)
@@ -77,6 +79,8 @@ const Attempt = mongoose.model(
   )
     .index({ user: 1, exam: 1, createdAt: 1 })
     .index({ user: 1, test: 1 })
+    .index({ submission_id: 1 }, { unique: true, sparse: true })
+    .index({ user: 1 }, { unique: true, partialFilterExpression: { pending: true } })
     .index({ status: 1 })
 );
 
@@ -105,9 +109,27 @@ const GroupChat = mongoose.model(
 const JobLog = mongoose.model(
   'JobLog',
   new mongoose.Schema(
-    { key: { type: String, required: true, unique: true } },
+    {
+      key: { type: String, required: true, unique: true },
+      state: { type: String, enum: ['running', 'done', 'failed'] },
+      owner: String,
+      lease_until: Date,
+      completed_at: Date,
+    },
     { timestamps: true, collection: 'bot_job_logs' }
   )
 );
 
-module.exports = { TgLink, Test, Attempt, GroupChat, JobLog };
+const BotSession = mongoose.model('BotSession', new mongoose.Schema({
+  telegram_id: { type: Number, required: true, unique: true },
+  data: mongoose.Schema.Types.Mixed,
+  expires_at: { type: Date, expires: 0 },
+}, { collection: 'bot_sessions' }));
+
+const LinkCode = mongoose.model('LinkCode', new mongoose.Schema({
+  hash: { type: String, required: true, unique: true },
+  user: { type: ObjectId, ref: 'User', required: true, unique: true },
+  expires_at: { type: Date, expires: 0 },
+}, { collection: 'bot_link_codes' }));
+
+module.exports = { TgLink, Test, Attempt, GroupChat, JobLog, BotSession, LinkCode };

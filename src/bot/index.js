@@ -1,9 +1,20 @@
 const { Bot } = require('grammy');
 const config = require('../config');
-const { getSession, clearSession, steps, sendMenu } = require('./common');
+const { getSession, clearSession, persistentSession, steps, sendMenu, isAdmin } = require('./common');
 
 function createBot() {
   const bot = new Bot(config.BOT_TOKEN);
+
+  // Student work, credentials and admin editing are private-chat only.
+  bot.use(async (ctx, next) => {
+    if (ctx.chat?.type === 'private') return next();
+    if (ctx.myChatMember || ctx.message?.migrate_to_chat_id || ctx.message?.migrate_from_chat_id) return next();
+    const command = /^\/(ulash|uzish|sozlamalar|davomat_vaqti|dars_kunlari|tolov_sanasi|davomat|tolov)(?:@\w+)?(?:\s|$)/;
+    if (ctx.message?.text && command.test(ctx.message.text)) return next();
+    if (ctx.callbackQuery) return ctx.answerCallbackQuery({ text: 'Botning shaxsiy chatini oching.' });
+    return null;
+  });
+  bot.use(persistentSession);
 
   bot.callbackQuery('cancel', async (ctx) => {
     clearSession(ctx.from.id);
@@ -26,15 +37,29 @@ function createBot() {
   bot.on('message', async (ctx) => {
     if (ctx.chat.type !== 'private') return null;
     const s = getSession(ctx.from.id);
-    if (s && steps[s.step]) return steps[s.step](ctx, s);
+    if (s && steps[s.step]) {
+      if (/^(t_|w_)/.test(s.step) && !(await isAdmin(ctx.from.id))) {
+        clearSession(ctx.from.id);
+        return ctx.reply('Bu amal faqat admin uchun.');
+      }
+      return steps[s.step](ctx, s);
+    }
     return sendMenu(ctx, "Menyudan tanlang 👇 (yoki /start)");
   });
 
-  bot.catch((err) => {
+  bot.catch(async (err) => {
     console.error(`Bot xatosi (update ${err.ctx?.update?.update_id}):`, err.error);
+    await awaitErrorReply(err.ctx);
   });
 
   return bot;
+}
+
+function awaitErrorReply(ctx) {
+  if (ctx?.chat?.type === 'private') {
+    return ctx.reply('Amal bajarilmadi. Qayta urinib ko‘ring yoki /cancel bosing.').catch(() => {});
+  }
+  return null;
 }
 
 module.exports = { createBot };

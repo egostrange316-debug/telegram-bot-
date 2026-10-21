@@ -1,16 +1,34 @@
 const { Keyboard } = require('grammy');
 const config = require('../config');
 const { User } = require('../models/app');
-const { TgLink } = require('../models/bot');
+const { TgLink, BotSession } = require('../models/bot');
 
 /**
- * Suhbat holati (qaysi bosqichda ekanligi) — xotirada. Bot qayta ishga tushsa, boshlangan
- * kiritish bekor bo'ladi, lekin testlar/tahlillar bazada saqlangani uchun davom ettirsa bo'ladi.
+ * Har bir yangilanishda MongoDB'dan olinadi va qayta saqlanadi (24 soat).
+ * Parol matni hech qachon session ichiga yozilmaydi.
  */
 const sessions = new Map();
 const getSession = (id) => sessions.get(id) || null;
 const setSession = (id, s) => sessions.set(id, s);
 const clearSession = (id) => sessions.delete(id);
+
+async function persistentSession(ctx, next) {
+  if (!ctx.from || ctx.chat?.type !== 'private') return next();
+  const id = ctx.from.id;
+  const saved = await BotSession.findOne({ telegram_id: id, expires_at: { $gt: new Date() } }).lean();
+  if (saved) sessions.set(id, saved.data);
+  else sessions.delete(id);
+  try { return await next(); }
+  finally {
+    const data = sessions.get(id);
+    try {
+      if (data) await BotSession.updateOne({ telegram_id: id }, { $set: {
+        data, expires_at: new Date(Date.now() + 24 * 3600_000),
+      } }, { upsert: true });
+      else await BotSession.deleteOne({ telegram_id: id });
+    } finally { sessions.delete(id); }
+  }
+}
 
 /** Bosqich nomi -> matn/fayl qabul qiluvchi funksiya. Modullar o'zlarinikini ro'yxatdan o'tkazadi. */
 const steps = {};
@@ -112,7 +130,7 @@ async function safeSend(fn) {
 }
 
 module.exports = {
-  sessions, getSession, setSession, clearSession, steps, esc,
+  sessions, getSession, setSession, clearSession, persistentSession, steps, esc,
   linkedUser, isAdmin, adminChatIds, actorUserId,
   BTN, mainMenu, sendMenu, sendMaterial, materialFromMessage, safeSend,
 };

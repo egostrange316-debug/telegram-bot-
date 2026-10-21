@@ -13,6 +13,8 @@ const config = {
   PORT: Number(process.env.PORT) || 8080,
   // Mini App (grafik sahifasi) manzili, masalan https://bot.example.uz/webapp — bo'lmasa tugma chiqmaydi
   WEBAPP_URL: process.env.WEBAPP_URL || '',
+  BOT_USERNAME: (process.env.BOT_USERNAME || '').replace(/^@/, ''),
+  CORS_ORIGINS: list(process.env.CORS_ORIGINS),
   // Botdagi grafik rasmi uchun (Chart.js konfiguratsiyasidan PNG). Bo'sh qoldirilsa rasm yuborilmaydi
   CHART_URL: process.env.CHART_URL === undefined ? 'https://quickchart.io/chart' : process.env.CHART_URL,
   // Davomat ro'yxati admin uchun necha daqiqa oldin ochiladi

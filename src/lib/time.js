@@ -50,6 +50,7 @@ const humanDate = (key) => key.split('-').reverse().join('.');
 /** Ilovadagi subscriptionInfo bilan bir xil: 'paid' | 'grace' | 'blocked' */
 function subscriptionState(user, now = new Date()) {
   const end = user.subscription_end_date ? new Date(user.subscription_end_date) : null;
+  if (!end || !Number.isFinite(end.getTime())) return 'unpaid';
   if (user.status === 'blocked') return 'blocked';
   if (end && now > new Date(end.getTime() + GRACE_DAYS * DAY_MS)) return 'blocked';
   if (end && now > end) return 'grace';

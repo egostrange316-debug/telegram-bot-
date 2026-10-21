@@ -92,7 +92,8 @@ function parseWritingScore(exam, text, defaultMax) {
   const m = /^\s*(\d+(?:[.,]\d+)?)\s*(?:\/\s*(\d+(?:[.,]\d+)?))?\s*$/.exec(String(text || ''));
   if (!m) return null;
   const score = Number(m[1].replace(',', '.'));
-  const max = exam === 'ielts' ? 9 : Number((m[2] || String(defaultMax || 75)).replace(',', '.'));
+  const max = exam === 'ielts' ? 9 : (defaultMax || 75);
+  if (m[2] && Number(m[2].replace(',', '.')) !== max) return null;
   if (!(max > 0) || score < 0 || score > max) return null;
   if (exam === 'ielts' && (score * 2) % 1 !== 0) return null;
   return { score, max_score: max, percent: Math.round((score / max) * 1000) / 10 };

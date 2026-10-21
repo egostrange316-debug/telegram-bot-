@@ -2,7 +2,8 @@ const { InlineKeyboard } = require('grammy');
 const { User } = require('../models/app');
 const { GroupChat } = require('../models/bot');
 const { subscriptionState, endOfMonth, tashkentParts } = require('../lib/time');
-const { esc, isAdmin, adminChatIds, actorUserId, safeSend } = require('./common');
+const { esc, isAdmin, adminChatIds, actorUserId } = require('./common');
+const { deliverOnce, sendReport } = require('../lib/delivery');
 const { roster } = require('./attendance');
 
 const MONTHS = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
@@ -25,31 +26,43 @@ const monthTitle = () => {
 };
 
 /** Guruhga: kim to'lagan, kim to'lamagan */
-async function postReport(api, group) {
+async function postReport(api, group, key) {
   const { paid, unpaid } = await split(group);
-  const list = (arr) => (arr.length ? arr.map((s, i) => `${i + 1}. ${esc(s.full_name)}`).join('\n') : '—');
+  const list = (arr) => (arr.length ? arr.map((s, i) => `${i + 1}. ${esc(String(s.full_name).slice(0, 150))}`).join('\n') : '—');
   const text =
     `💰 <b>Oylik to'lov — ${monthTitle()}</b>\n\n` +
     `✅ <b>To'laganlar (${paid.length}):</b>\n${list(paid)}\n\n` +
     `❌ <b>To'lamaganlar (${unpaid.length}):</b>\n${list(unpaid)}` +
     (unpaid.length ? "\n\nIltimos, to'lovni o'z vaqtida amalga oshiring 🙏" : '');
-  return safeSend(() => api.sendMessage(group.chat_id, text, { parse_mode: 'HTML' }));
+  return sendReport(api, group.chat_id, text, key);
 }
 
 /** Adminga: to'lamaganlar ro'yxati, har biri yonida "To'ladi" tugmasi */
-async function unpaidSheet(group) {
+async function unpaidSheet(group, requestedPage = 0) {
   const { unpaid } = await split(group);
   const kb = new InlineKeyboard();
-  unpaid.forEach((s) => kb.text(`💵 ${s.full_name}`.slice(0, 40), `pay:${s._id}`).row());
+  const pages = Math.max(1, Math.ceil(unpaid.length / 40));
+  const page = Math.min(Math.max(0, Number(requestedPage) || 0), pages - 1);
+  unpaid.slice(page * 40, (page + 1) * 40).forEach((s) => kb.text(`💵 ${s.full_name}`.slice(0, 40), `pay:${s._id}`).row());
+  if (page > 0) kb.text('⬅️', `paylist:${group._id}:${page - 1}`);
+  if (page + 1 < pages) kb.text('➡️', `paylist:${group._id}:${page + 1}`);
   const text = unpaid.length
-    ? `💰 <b>${esc(group.title || group.group_name || 'Guruh')}</b> — to'lamaganlar (${unpaid.length}).\nTo'lov qilganini belgilash uchun ismini bosing (shu oy oxirigacha ochiladi, ilovada ham ko'rinadi).`
+    ? `💰 <b>${esc(group.title || group.group_name || 'Guruh')}</b> — to'lamaganlar (${unpaid.length}). Sahifa ${page + 1}/${pages}.\nTo'lov qilganini belgilash uchun ismini bosing (shu oy oxirigacha ochiladi, ilovada ham ko'rinadi).`
     : `💰 <b>${esc(group.title || group.group_name || 'Guruh')}</b> — hamma to'lagan ✅`;
   return { text, kb };
 }
 
-async function sendUnpaidToAdmins(api, group) {
+async function sendUnpaidToAdmins(api, group, key) {
   const { text, kb } = await unpaidSheet(group);
-  for (const id of await adminChatIds()) await safeSend(() => api.sendMessage(id, text, { parse_mode: 'HTML', reply_markup: kb }));
+  const errors = [];
+  for (const id of await adminChatIds()) {
+    try {
+      const send = () => api.sendMessage(id, text, { parse_mode: 'HTML', reply_markup: kb });
+      if (key) await deliverOnce(`${key}:${id}`, send);
+      else await send();
+    } catch (error) { errors.push(error); }
+  }
+  if (errors.length) throw errors[0];
 }
 
 /**
@@ -63,14 +76,20 @@ async function markPaid(userId, byUserId, now = new Date()) {
   if (student.status === 'active' && student.subscription_end_date && target <= new Date(student.subscription_end_date)) {
     return { ok: false, reason: 'already', student };
   }
-  await User.updateOne(
-    { _id: student._id },
+  const result = await User.updateOne(
+    { _id: student._id, role: 'student', $or: [
+      { status: { $ne: 'active' } }, { subscription_end_date: { $lt: target } },
+      { subscription_end_date: null },
+    ] },
     {
-      $set: { status: 'active', subscription_end_date: target },
+      $set: { status: 'active' },
+      $max: { subscription_end_date: target },
       $push: { payments: { $each: [{ paid_at: now, paid_through: target, kind: 'month', months: 1, note: 'Telegram bot', by: byUserId }], $slice: -60 } },
     }
   );
-  return { ok: true, student, target };
+  if (!result.modifiedCount) return { ok: false, reason: 'already', student };
+  const effectiveTarget = student.subscription_end_date && new Date(student.subscription_end_date) > target ? new Date(student.subscription_end_date) : target;
+  return { ok: true, student, target: effectiveTarget };
 }
 
 function register(bot) {
@@ -102,14 +121,14 @@ function register(bot) {
     return ctx.answerCallbackQuery({ text: '📤 Guruhga yuborildi' });
   });
 
-  bot.callbackQuery(/^paylist:([a-f\d]{24})$/, async (ctx) => {
+  bot.callbackQuery(/^paylist:([a-f\d]{24})(?::(\d{1,5}))?$/, async (ctx) => {
     if (!(await isAdmin(ctx.from.id))) return ctx.answerCallbackQuery({ text: 'Faqat admin' });
     const group = await GroupChat.findById(ctx.match[1]).lean();
     if (!group) return ctx.answerCallbackQuery({ text: 'Guruh topilmadi' });
     await ctx.answerCallbackQuery();
-    const { text, kb } = await unpaidSheet(group);
+    const { text, kb } = await unpaidSheet(group, Number(ctx.match[2] || 0));
     return ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
   });
 }
 
-module.exports = { register, postReport, sendUnpaidToAdmins, markPaid, split };
+module.exports = { register, postReport, sendUnpaidToAdmins, markPaid, split, unpaidSheet };

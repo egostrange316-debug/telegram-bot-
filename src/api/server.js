@@ -2,10 +2,12 @@ const crypto = require('crypto');
 const path = require('path');
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const config = require('../config');
 const { User } = require('../models/app');
 const { TgLink } = require('../models/bot');
 const { userResults, leaderboard, isId } = require('../lib/stats');
+const { issueLinkCode } = require('../lib/linking');
 
 /**
  * Ilova va Telegram Mini App uchun API.
@@ -19,17 +21,20 @@ const { userResults, leaderboard, isId } = require('../lib/stats');
 function verifyInitData(initData, botToken, maxAgeSec = 24 * 3600) {
   if (!initData || !botToken) return null;
   const params = new URLSearchParams(initData);
+  if ([...params.keys()].some((key) => params.getAll(key).length !== 1)) return null;
   const hash = params.get('hash');
-  if (!hash) return null;
+  if (!/^[a-f\d]{64}$/.test(hash || '')) return null;
   params.delete('hash');
   const dataCheck = [...params.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join('\n');
   const secret = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
   const calc = crypto.createHmac('sha256', secret).update(dataCheck).digest('hex');
   if (calc.length !== hash.length || !crypto.timingSafeEqual(Buffer.from(calc), Buffer.from(hash))) return null;
   const authDate = Number(params.get('auth_date'));
-  if (!authDate || Date.now() / 1000 - authDate > maxAgeSec) return null;
+  const age = Date.now() / 1000 - authDate;
+  if (!Number.isSafeInteger(authDate) || authDate <= 0 || age < -30 || age > maxAgeSec) return null;
   try {
-    return JSON.parse(params.get('user') || 'null');
+    const user = JSON.parse(params.get('user') || 'null');
+    return user && Number.isSafeInteger(user.id) && user.id > 0 ? user : null;
   } catch {
     return null;
   }
@@ -40,7 +45,9 @@ async function auth(req, res, next) {
     let userId = null;
     const h = req.headers.authorization || '';
     if (h.startsWith('Bearer ') && config.JWT_SECRET) {
-      userId = jwt.verify(h.slice(7), config.JWT_SECRET).id;
+      const payload = jwt.verify(h.slice(7), config.JWT_SECRET, { algorithms: ['HS256'] });
+      if (!payload.exp) return res.status(401).json({ message: 'Token muddati berilmagan' });
+      userId = payload.id;
     } else if (req.headers['x-telegram-init-data']) {
       const tg = verifyInitData(req.headers['x-telegram-init-data'], config.BOT_TOKEN);
       const link = tg && (await TgLink.findOne({ telegram_id: tg.id }).lean());
@@ -68,17 +75,32 @@ const examParam = (req, res) => {
 
 function createServer() {
   const app = express();
-  app.set('trust proxy', 1);
+  app.disable('x-powered-by');
   app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
+    const origin = req.headers.origin;
+    const sameHost = origin === `https://${req.get('host')}` || origin === `http://${req.get('host')}`;
+    if (origin && !sameHost && !config.CORS_ORIGINS.includes(origin)) return res.status(403).json({ message: 'Ilova domeni CORS_ORIGINS ga kiritilmagan' });
+    if (origin) { res.setHeader('Access-Control-Allow-Origin', origin); res.vary('Origin'); }
     res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Telegram-Init-Data');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     return next();
   });
 
-  app.get('/health', (req, res) => res.json({ status: 'ok' }));
+  app.get('/health', (req, res) => {
+    const ready = mongoose.connection.readyState === 1;
+    return res.status(ready ? 200 : 503).json({ status: ready ? 'ok' : 'unavailable' });
+  });
   app.use('/webapp', express.static(path.join(__dirname, '..', '..', 'public'), { maxAge: '1h' }));
+
+  app.post('/api/telegram/link', auth, wrap(async (req, res) => {
+    if (!config.BOT_USERNAME) return res.status(503).json({ message: 'Bot hali ishga tushmagan' });
+    const code = await issueLinkCode(req.user._id);
+    return res.json({ url: `https://t.me/${config.BOT_USERNAME}?start=link_${code}`, expires_in: 300 });
+  }));
 
   /** O'z natijalari (grafik uchun). Admin `user_id` bilan istalgan o'quvchinikini ko'radi */
   app.get('/api/exams/results', auth, wrap(async (req, res) => {

@@ -1,3 +1,4 @@
+const config = require('../config');
 const { User } = require('../models/app');
 const { GroupChat } = require('../models/bot');
 const { parseHHMM, formatHHMM } = require('../lib/time');
@@ -12,6 +13,8 @@ const inGroup = (ctx) => ['group', 'supergroup'].includes(ctx.chat?.type);
 const groupAdmin = (fn) => async (ctx) => {
   if (!inGroup(ctx)) return ctx.reply("Bu buyruq Telegram guruhning o'zida yoziladi.");
   if (!(await isAdmin(ctx.from.id))) return ctx.reply('Bu buyruq faqat o\'quv markaz admini uchun.');
+  const member = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
+  if (!['creator', 'administrator'].includes(member.status)) return ctx.reply('Siz Telegram guruhida ham admin bo‘lishingiz kerak.');
   return fn(ctx);
 };
 
@@ -24,12 +27,18 @@ async function connectedGroup(ctx) {
 function settingsText(g) {
   return (
     `⚙️ <b>Sozlamalar</b>\nIlovadagi guruh: <b>${esc(g.group_name || "barcha o'quvchilar")}</b>\n` +
-    `⏰ Davomat: <b>${g.attendance_time}</b> (${g.days.map((d) => DAY_NAMES[d]).join(', ')}) — ro'yxat admin uchun 30 daqiqa oldin ochiladi\n` +
+    `⏰ Davomat: <b>${g.attendance_time}</b> (${g.days.map((d) => DAY_NAMES[d]).join(', ')}) — ro'yxat admin uchun ${config.ATTENDANCE_OPEN_BEFORE_MIN} daqiqa oldin ochiladi\n` +
     `💰 To'lov hisoboti: har oyning <b>${g.pay_day}-kuni</b>, ${g.pay_time}`
   );
 }
 
 function register(bot) {
+  bot.on('message:migrate_to_chat_id', async (ctx) => {
+    await GroupChat.updateOne({ chat_id: ctx.chat.id }, { $set: { chat_id: ctx.message.migrate_to_chat_id } });
+  });
+  bot.on('message:migrate_from_chat_id', async (ctx) => {
+    await GroupChat.updateOne({ chat_id: ctx.message.migrate_from_chat_id }, { $set: { chat_id: ctx.chat.id, title: ctx.chat.title } });
+  });
   // Botni guruhga qo'shishganda yo'riqnoma
   bot.on('my_chat_member', async (ctx) => {
     const st = ctx.myChatMember.new_chat_member.status;
@@ -52,7 +61,7 @@ function register(bot) {
       { $set: { title: ctx.chat.title, group_name: name, enabled: true } },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     ).lean();
-    const warn = count > attendance.MAX_SHEET ? `\n\n⚠️ Davomat ro'yxatida faqat ${attendance.MAX_SHEET} ta o'quvchi sig'adi — guruh nomini ko'rsatib ulang: /ulash 1-guruh` : '';
+    const warn = count > attendance.MAX_SHEET ? `\n\nDavomat ro‘yxati ${attendance.MAX_SHEET} tadan sahifalanadi.` : '';
     return ctx.reply(`✅ Guruh ulandi. O'quvchilar: ${count} ta.\n\n${settingsText(g)}${warn}`, { parse_mode: 'HTML' });
   }));
 
@@ -71,7 +80,7 @@ function register(bot) {
     if (min === null) return ctx.reply('Masalan: /davomat_vaqti 14:00');
     const g = await GroupChat.findOneAndUpdate({ chat_id: ctx.chat.id, enabled: true }, { $set: { attendance_time: formatHHMM(min) } }, { new: true }).lean();
     if (!g) return connectedGroup(ctx);
-    return ctx.reply(`✅ Davomat vaqti: ${g.attendance_time}. Ro'yxat admin uchun ${formatHHMM(Math.max(0, min - 30))} da ochiladi.`);
+    return ctx.reply(`✅ Davomat vaqti: ${g.attendance_time}. Ro'yxat admin uchun ${formatHHMM((min - config.ATTENDANCE_OPEN_BEFORE_MIN + 1440) % 1440)} da ochiladi.`);
   }));
 
   bot.command('dars_kunlari', groupAdmin(async (ctx) => {

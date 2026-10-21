@@ -66,6 +66,10 @@ async function userResults(userId, exam) {
 async function leaderboard(exam, limit = 100) {
   const agg = await Attempt.aggregate([
     { $match: { exam, status: { $ne: 'grading' }, percent: { $ne: null } } },
+    // First graded attempt per test counts towards ranking; retakes remain on the personal chart.
+    { $sort: { createdAt: 1, _id: 1 } },
+    { $group: { _id: { user: '$user', test: '$test' }, first: { $first: '$$ROOT' } } },
+    { $replaceRoot: { newRoot: '$first' } },
     { $group: { _id: '$user', avg: { $avg: '$percent' }, band: { $avg: '$band' }, count: { $sum: 1 }, last: { $max: '$createdAt' } } },
     { $sort: { avg: -1, count: -1, last: 1 } },
   ]);

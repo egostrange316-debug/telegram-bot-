@@ -96,3 +96,66 @@ test('Mini App initData imzosi', () => {
   params.set('user', JSON.stringify({ id: 1 }));
   assert.strictEqual(verifyInitData(params.toString(), token), null);
 });
+
+const { plannedJobs } = require('../src/scheduler');
+const { messageChunks } = require('../src/lib/delivery');
+const { allowLogin } = require('../src/lib/login-limit');
+
+test('scheduler: 00:15 dars uchun oldingi kuni 23:45 da davomat ochiladi', () => {
+  const group = { chat_id: -1, days: [1], attendance_time: '00:15', pay_day: 5, pay_time: '10:00' };
+  const jobs = plannedJobs(group, new Date('2026-10-11T18:45:00Z'));
+  assert.deepStrictEqual(jobs.map(j => [j.type, j.date]), [['attendance-open', '2026-10-12']]);
+});
+
+test('scheduler: yarim tundan keyin kechagi davomatni tiklaydi', () => {
+  const group = { chat_id: -1, days: [0], attendance_time: '23:55', pay_day: 5, pay_time: '10:00' };
+  const jobs = plannedJobs(group, new Date('2026-10-11T19:05:00Z'));
+  assert.deepStrictEqual(jobs.map(j => [j.type, j.date]), [['attendance-post', '2026-10-11']]);
+});
+
+test('scheduler: kabisa yilida 31-sanadagi to‘lov 29-fevralga tushadi', () => {
+  const group = { chat_id: -1, days: [], attendance_time: '14:00', pay_day: 31, pay_time: '10:00' };
+  const jobs = plannedJobs(group, new Date('2028-02-29T05:00:00Z'));
+  assert.deepStrictEqual(jobs.map(j => j.type), ['payment-post', 'payment-admin']);
+  assert.equal(plannedJobs(group, new Date('2028-02-29T05:20:00Z')).length, 0);
+});
+
+test('to‘lov: sanasiz yoki noto‘g‘ri sanali o‘quvchi to‘lagan hisoblanmaydi', () => {
+  assert.equal(subscriptionState({ status: 'active' }), 'unpaid');
+  assert.equal(subscriptionState({ subscription_end_date: 'invalid' }), 'unpaid');
+});
+
+test('Writing: belgilangan maksimumni o‘zgartirib bo‘lmaydi', () => {
+  assert.equal(parseWritingScore('cefr', '60/100', 75), null);
+  assert.equal(parseWritingScore('ielts', '6/7'), null);
+});
+
+test('uzun hisobotlar HTML satrlarini bo‘lmasdan ajratiladi', () => {
+  const lines = Array.from({ length: 200 }, (_, i) => `${i}. Ali &amp; Vali`);
+  const result = messageChunks(lines.join('\n'), 100);
+  assert.ok(result.every(s => s.length <= 100));
+  assert.equal(result.join('\n'), lines.join('\n'));
+});
+
+test('login urinishlari Telegram va akkaunt bo‘yicha cheklanadi', () => {
+  for (let i = 0; i < 5; i++) assert.equal(allowLogin(1, 'ali', 1000), true);
+  assert.equal(allowLogin(2, 'ali', 1000), false);
+  assert.equal(allowLogin(1, 'vali', 1000), false);
+  assert.equal(allowLogin(1, 'ali', 1000 + 16 * 60000), true);
+});
+
+test('Mini App: kelajak sanasi, eskirgan va takrorlangan parametrlar rad etiladi', () => {
+  const token = '123:TEST';
+  function signed(authDate, user = { id: 42 }) {
+    const params = new URLSearchParams({ auth_date: String(authDate), user: JSON.stringify(user) });
+    const text = [...params.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join('\n');
+    const secret = crypto.createHmac('sha256', 'WebAppData').update(token).digest();
+    params.set('hash', crypto.createHmac('sha256', secret).update(text).digest('hex'));
+    return params.toString();
+  }
+  const now = Math.floor(Date.now() / 1000);
+  assert.equal(verifyInitData(signed(now + 3600), token), null);
+  assert.equal(verifyInitData(signed(now - 86401), token), null);
+  assert.equal(verifyInitData(signed(now, { id: '42' }), token), null);
+  assert.equal(verifyInitData(signed(now) + '&auth_date=' + now, token), null);
+});

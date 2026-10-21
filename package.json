@@ -1,11 +1,13 @@
 {
   "name": "enzo-telegram-bot",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "O'quv markaz ilovasi (ENZO) uchun Telegram bot: IELTS/CEFR testlari, tahlil, reyting, davomat va to'lov eslatmalari",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test --test-concurrency=1 tests/*.test.js"
+    "test": "node --test --test-concurrency=1 tests/*.test.js",
+    "test:unit": "node --test tests/units.test.js",
+    "check": "node scripts/check.js"
   },
   "repository": {
     "type": "git",
@@ -25,6 +27,9 @@
   },
   "type": "commonjs",
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^10.4.3"
   }
 }

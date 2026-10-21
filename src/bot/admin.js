@@ -40,6 +40,7 @@ steps.t_title = async (ctx, s) => {
 };
 
 steps.t_materials = async (ctx, s) => {
+  if (s.materials.length >= 100) return ctx.reply('100 ta material qo‘shildi. «Materiallar tayyor» tugmasini bosing.');
   const m = materialFromMessage(ctx.message);
   if (!m) return ctx.reply("Bu turdagi xabar qabul qilinmaydi. Matn, audio, fayl, rasm yoki video yuboring.");
   s.materials.push(m);
@@ -66,8 +67,10 @@ steps.t_key = async (ctx, s) => {
   const key = parseKey(ctx.message.text || '');
   const empty = key.findIndex((v) => !v.length);
   if (!key.length) return ctx.reply('Javob kaliti topilmadi. Qaytadan yuboring.');
+  if (key.length > 200 || key.some((v) => v.some((answer) => answer.length > 100))) return ctx.reply('Ko‘pi bilan 200 savol, har javob 100 belgigacha.');
   if (empty !== -1) return ctx.reply(`${empty + 1}-savol javobi yo'q. Kalitni to'liq qaytadan yuboring.`);
   if (s.editTestId) {
+    if (await Attempt.exists({ test: s.editTestId })) return ctx.reply('Bu testni o‘quvchi ishlab bo‘lgan. Natijalarni o‘zgartirmaslik uchun yangi test yarating. /cancel');
     await Test.updateOne({ _id: s.editTestId }, { $set: { answer_key: key } });
     clearSession(ctx.from.id);
     return ctx.reply(`✅ Javob kaliti yangilandi (${key.length} ta savol).`);
@@ -76,24 +79,28 @@ steps.t_key = async (ctx, s) => {
 };
 
 async function saveTest(ctx, s, key) {
-  clearSession(ctx.from.id);
   const last = await Test.findOne({ exam: s.exam, section: s.section }).sort({ order: -1 }).select('order').lean();
   const test = await Test.create({
     exam: s.exam, section: s.section, title: s.title, order: (last ? last.order : 0) + 1,
     materials: s.materials, answer_key: key,
     max_score: s.section === 'writing' ? (s.exam === 'ielts' ? 9 : 75) : undefined,
   });
+  clearSession(ctx.from.id);
   const preview = key.length ? `\n🔑 ${key.length} ta savol: ${key.slice(0, 10).map((v, i) => `${i + 1}) ${v.join('/')}`).join(', ')}${key.length > 10 ? ' …' : ''}` : '';
   return ctx.reply(`✅ Test saqlandi: <b>${esc(test.title)}</b>\n${EXAM_NAMES[test.exam]} · ${SECTION_NAMES[test.section]} · №${test.order}\n📎 ${test.materials.length} ta material${esc(preview)}`, { parse_mode: 'HTML' });
 }
 
 /* ------------------------------ testlar ro'yxati ------------------------------ */
 
-async function listTests(ctx, exam, section) {
+async function listTests(ctx, exam, section, requestedPage = 0) {
   const tests = await Test.find({ exam, section, active: true }).sort({ order: 1 }).lean();
   const kb = new InlineKeyboard();
-  tests.forEach((t, i) => kb.text(`${i + 1}. ${t.title}`.slice(0, 60), `adt:${t._id}`).row());
-  kb.text('⬅️ Orqaga', `adl:${exam}`);
+  const pages = Math.max(1, Math.ceil(tests.length / 40));
+  const page = Math.min(Math.max(0, requestedPage), pages - 1);
+  tests.slice(page * 40, (page + 1) * 40).forEach((t, i) => kb.text(`${page * 40 + i + 1}. ${t.title}`.slice(0, 60), `adt:${t._id}`).row());
+  if (page > 0) kb.text('⬅️', `adls:${exam}:${section}:${page - 1}`);
+  if (page + 1 < pages) kb.text('➡️', `adls:${exam}:${section}:${page + 1}`);
+  kb.row().text('⬅️ Orqaga', `adl:${exam}`);
   return ctx.editMessageText(`📚 <b>${EXAM_NAMES[exam]} · ${SECTION_NAMES[section]}</b> — ${tests.length} ta test`, { parse_mode: 'HTML', reply_markup: kb });
 }
 
@@ -156,7 +163,7 @@ steps.w_score = async (ctx, s) => {
 
 steps.w_feedback = async (ctx, s) => {
   const feedback = (ctx.message.text || '').trim();
-  if (feedback.length < 5) return ctx.reply('Izohni matn bilan yozing.');
+  if (feedback.length < 5 || feedback.length > 1000) return ctx.reply('Izohni 5–1000 belgi bilan yozing.');
   const set = {
     status: 'analysis', score: s.score.score, max_score: s.score.max_score, percent: s.score.percent,
     feedback, graded_by: await actorUserId(ctx.from.id),
@@ -225,9 +232,9 @@ function register(bot) {
     await ctx.answerCallbackQuery();
     return ctx.editMessageText(`${EXAM_NAMES[ctx.match[1]]} — bo'lim:`, { reply_markup: sectionKb('adls', ctx.match[1]) });
   }));
-  bot.callbackQuery(/^adls:(ielts|cefr):(reading|listening|writing)$/, adminOnly(async (ctx) => {
+  bot.callbackQuery(/^adls:(ielts|cefr):(reading|listening|writing)(?::(\d{1,5}))?$/, adminOnly(async (ctx) => {
     await ctx.answerCallbackQuery();
-    return listTests(ctx, ctx.match[1], ctx.match[2]);
+    return listTests(ctx, ctx.match[1], ctx.match[2], Number(ctx.match[3] || 0));
   }));
   bot.callbackQuery(/^adt:([a-f\d]{24})$/, adminOnly((ctx) => testDetail(ctx, ctx.match[1])));
   bot.callbackQuery(/^adv:([a-f\d]{24})$/, adminOnly(async (ctx) => {
