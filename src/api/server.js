@@ -44,7 +44,7 @@ async function auth(req, res, next) {
   try {
     let userId = null;
     const h = req.headers.authorization || '';
-    if (h.startsWith('Bearer ') && config.JWT_SECRET) {
+    if (!config.STANDALONE && h.startsWith('Bearer ') && config.JWT_SECRET) {
       const payload = jwt.verify(h.slice(7), config.JWT_SECRET, { algorithms: ['HS256'] });
       if (!payload.exp) return res.status(401).json({ message: 'Token muddati berilmagan' });
       userId = payload.id;
@@ -97,6 +97,7 @@ function createServer() {
   app.use('/webapp', express.static(path.join(__dirname, '..', '..', 'public'), { maxAge: '1h' }));
 
   app.post('/api/telegram/link', auth, wrap(async (req, res) => {
+    if (config.STANDALONE) return res.status(404).json({ message: 'Botga Telegram guruhidagi havola orqali kiring' });
     if (!config.BOT_USERNAME) return res.status(503).json({ message: 'Bot hali ishga tushmagan' });
     const code = await issueLinkCode(req.user._id);
     return res.json({ url: `https://t.me/${config.BOT_USERNAME}?start=link_${code}`, expires_in: 300 });

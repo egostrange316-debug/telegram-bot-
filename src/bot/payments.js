@@ -46,7 +46,7 @@ async function unpaidSheet(group, requestedPage = 0) {
   if (page > 0) kb.text('⬅️', `paylist:${group._id}:${page - 1}`);
   if (page + 1 < pages) kb.text('➡️', `paylist:${group._id}:${page + 1}`);
   const text = unpaid.length
-    ? `💰 <b>${esc(group.title || group.group_name || 'Guruh')}</b> — to'lamaganlar (${unpaid.length}). Sahifa ${page + 1}/${pages}.\nTo'lov qilganini belgilash uchun ismini bosing (shu oy oxirigacha ochiladi, ilovada ham ko'rinadi).`
+    ? `💰 <b>${esc(group.title || group.group_name || 'Guruh')}</b> — to'lamaganlar (${unpaid.length}). Sahifa ${page + 1}/${pages}.\nTo'lov qilganini belgilash uchun ismini bosing (shu oy oxirigacha to‘lagan deb qayd etiladi).`
     : `💰 <b>${esc(group.title || group.group_name || 'Guruh')}</b> — hamma to'lagan ✅`;
   return { text, kb };
 }

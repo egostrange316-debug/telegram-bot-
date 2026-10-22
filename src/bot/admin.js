@@ -1,6 +1,6 @@
 const { InlineKeyboard } = require('grammy');
 const { User } = require('../models/app');
-const { Test, Attempt, GroupChat } = require('../models/bot');
+const { Test, Attempt, GroupChat, ScreenshotResult } = require('../models/bot');
 const { TgLink } = require('../models/bot');
 const { parseKey, parseWritingScore, cefrLevel } = require('../lib/grading');
 const { SECTION_NAMES, EXAM_NAMES } = require('../lib/stats');
@@ -32,7 +32,7 @@ steps.t_title = async (ctx, s) => {
   const title = (ctx.message.text || '').trim();
   if (!title || title.length > 100) return ctx.reply('Test nomini matn bilan yozing (100 belgigacha).');
   setSession(ctx.from.id, { ...s, step: 't_materials', title, materials: [] });
-  const what = s.section === 'listening' ? 'audio (mp3), savollar (PDF/rasm/matn)' : s.section === 'reading' ? 'matn, PDF yoki rasmlar' : 'topshiriq (matn, rasm yoki PDF)';
+  const what = s.submissionMode === 'screenshot' ? 'HTML test fayli, PDF, audio yoki boshqa materiallar' : s.section === 'listening' ? 'audio (mp3), savollar (PDF/rasm/matn)' : s.section === 'reading' ? 'matn, PDF yoki rasmlar' : 'topshiriq (matn, rasm yoki PDF)';
   return ctx.reply(
     `📎 Endi materiallarni birma-bir yuboring: ${what}.\nO'quvchiga aynan shu tartibda yuboriladi.\n\nTugatgach «✅ Materiallar tayyor» ni bosing.`,
     { reply_markup: new InlineKeyboard().text('✅ Materiallar tayyor', 'ad:mdone').row().text('✖️ Bekor qilish', 'cancel') }
@@ -54,6 +54,7 @@ async function materialsDone(ctx) {
   if (!s || s.step !== 't_materials') return ctx.answerCallbackQuery({ text: 'Eskirgan tugma' });
   if (!s.materials.length) return ctx.answerCallbackQuery({ text: 'Kamida bitta material yuboring', show_alert: true });
   await ctx.answerCallbackQuery();
+  if (s.submissionMode === 'screenshot') return saveTest(ctx, s, []);
   if (s.section === 'writing') return saveTest(ctx, s, []);
   setSession(ctx.from.id, { ...s, step: 't_key' });
   return ctx.reply(
@@ -83,6 +84,7 @@ async function saveTest(ctx, s, key) {
   const test = await Test.create({
     exam: s.exam, section: s.section, title: s.title, order: (last ? last.order : 0) + 1,
     materials: s.materials, answer_key: key,
+    submission_mode: s.submissionMode || 'answers',
     max_score: s.section === 'writing' ? (s.exam === 'ielts' ? 9 : 75) : undefined,
   });
   clearSession(ctx.from.id);
@@ -109,11 +111,11 @@ async function testDetail(ctx, id) {
   if (!t) return ctx.answerCallbackQuery({ text: 'Topilmadi' });
   await ctx.answerCallbackQuery();
   const [count, pending] = await Promise.all([
-    Attempt.countDocuments({ test: t._id }),
-    Attempt.countDocuments({ test: t._id, status: { $ne: 'done' } }),
+    Promise.all([Attempt.countDocuments({ test: t._id }), ScreenshotResult.countDocuments({ test: t._id, status: 'accepted' })]).then(a => a[0] + a[1]),
+    Promise.all([Attempt.countDocuments({ test: t._id, status: { $ne: 'done' } }), ScreenshotResult.countDocuments({ test: t._id, needs_analysis: true })]).then(a => a[0] + a[1]),
   ]);
   const kb = new InlineKeyboard().text("👁 Materiallarni ko'rish", `adv:${t._id}`).row();
-  if (t.section !== 'writing') kb.text('🔑 Kalitni yangilash', `adk:${t._id}`).row();
+  if (t.section !== 'writing' && t.submission_mode !== 'screenshot') kb.text('🔑 Kalitni yangilash', `adk:${t._id}`).row();
   kb.text("🗑 O'chirish", `add:${t._id}`).row().text('⬅️ Orqaga', `adls:${t.exam}:${t.section}`);
   return ctx.editMessageText(
     `<b>${esc(t.title)}</b>\n${EXAM_NAMES[t.exam]} · ${SECTION_NAMES[t.section]} · №${t.order}\n` +
@@ -193,7 +195,7 @@ async function showGroups(ctx) {
   if (!groups.length) {
     return ctx.reply(
       "Hali guruh ulanmagan.\n\n1) Botni Telegram guruhga qo'shing (admin qiling).\n2) Guruhda yozing: <code>/ulash 1-guruh</code>\n" +
-        "   (ilovadagi guruh nomi; nomsiz <code>/ulash</code> — barcha o'quvchilar).",
+      "O‘quvchilar guruhdagi ro‘yxatdan o‘tish tugmasidan kiradi.",
       { parse_mode: 'HTML' }
     );
   }
@@ -202,7 +204,7 @@ async function showGroups(ctx) {
       .text('📋 Davomatni ochish', `gatt:${g._id}`).text('📤 Davomat → guruh', `as:${g._id}:${dateKey().replace(/-/g, '').slice(2)}`).row()
       .text("💵 To'lamaganlar", `paylist:${g._id}`).text("📤 To'lov → guruh", `payrep:${g._id}`);
     await ctx.reply(
-      `👥 <b>${esc(g.title)}</b>\nIlovadagi guruh: ${esc(g.group_name || 'barcha o\'quvchilar')}\n` +
+      `👥 <b>${esc(g.title)}</b>\nGuruh: ${esc(g.group_name || g.title || '—')}\n` +
         `⏰ Davomat: ${g.attendance_time} (${g.days.map((d) => DAY_NAMES[d]).join(', ')})\n💰 To'lov sanasi: har oyning ${g.pay_day}-kuni, ${g.pay_time}`,
       { parse_mode: 'HTML', reply_markup: kb }
     );
@@ -215,6 +217,16 @@ async function showGroups(ctx) {
 }
 
 function register(bot) {
+  bot.hears(BTN.addMaterial, adminOnly(ctx => ctx.reply('Material qaysi imtihon uchun?', { reply_markup: examKb('am:ex') })));
+  bot.callbackQuery(/^am:ex:(ielts|cefr)$/, adminOnly(async ctx => {
+    await ctx.answerCallbackQuery();
+    return ctx.editMessageText(`${EXAM_NAMES[ctx.match[1]]} — bo‘lim:`, { reply_markup: sectionKb('am:sec', ctx.match[1]) });
+  }));
+  bot.callbackQuery(/^am:sec:(ielts|cefr):(reading|listening|writing)$/, adminOnly(async ctx => {
+    await ctx.answerCallbackQuery();
+    setSession(ctx.from.id, { step: 't_title', exam: ctx.match[1], section: ctx.match[2], submissionMode: 'screenshot' });
+    return ctx.editMessageText('Material nomini yozing (masalan: Cambridge 18 — Reading 1). Keyin HTML/PDF va audio fayllarni yuborasiz.');
+  }));
   bot.hears(BTN.addTest, adminOnly((ctx) => ctx.reply('Qaysi imtihon uchun test qo\'shasiz?', { reply_markup: examKb('ad:ex') })));
   bot.callbackQuery(/^ad:ex:(ielts|cefr)$/, adminOnly(async (ctx) => {
     await ctx.answerCallbackQuery();

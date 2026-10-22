@@ -1,3 +1,4 @@
+process.env.STANDALONE = 'false'; // Legacy integration suite; standalone flows opt in explicitly below.
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const mongoose = require('mongoose');
@@ -48,7 +49,7 @@ beforeEach(async () => {
   sessions.clear();
 });
 
-function harness(fail, screenshots) {
+function harness(fail, screenshots, memberStatus = 'administrator') {
   const bot = createBot({ screenshots }), calls = [];
   bot.botInfo = { id: 123456789, is_bot: true, first_name: 'Test', username: 'enzo_test_bot' };
   bot.api.config.use(async (prev, method, payload) => {
@@ -59,7 +60,7 @@ function harness(fail, screenshots) {
       assert.ok(buttons.length <= 100, 'Telegram keyboard limit');
       for (const button of buttons) if (button.callback_data) assert.ok(Buffer.byteLength(button.callback_data) <= 64, 'Callback byte limit');
     }
-    if (method === 'getChatMember') return { ok: true, result: { status: 'administrator', user: { id: payload.user_id } } };
+    if (method === 'getChatMember') return { ok: true, result: { status: memberStatus, user: { id: payload.user_id } } };
     if (method === 'sendMessage' || method === 'editMessageText') {
       assert.ok((payload.text || '').length <= 4096, 'Telegram message limit');
       return { ok: true, result: { message_id: sequence++, date: 1, chat: { id: payload.chat_id, type: 'private' }, text: payload.text } };
@@ -93,6 +94,82 @@ async function answer(h, testDoc, text = '1-A 2-C') {
 }
 const token = (user) => jwt.sign({ id: String(user._id) }, config.JWT_SECRET, { expiresIn: '1h' });
 const request = (path, user, options = {}) => fetch(base + path, { ...options, headers: { ...(user ? { Authorization: `Bearer ${token(user)}` } : {}), ...options.headers } });
+
+test('Standalone creates an empty group and enrolls only its actual members without a password', async t => {
+  const mode = config.STANDALONE; config.STANDALONE = true;
+  t.after(() => { config.STANDALONE = mode; });
+  const h = harness();
+  await h.msg(900, '/ulash IELTS', {}, -9000);
+  const group = await GroupChat.findOne();
+  assert.ok(group);
+  assert.match(h.calls.at(-1).payload.reply_markup.inline_keyboard[0][0].url, /start=join_/);
+  await harness(null, null, 'left').msg(101, `/start join_${group._id}`);
+  assert.equal(await BotSession.countDocuments({ telegram_id: 101 }), 0);
+  await h.msg(100, `/start join_${group._id}`);
+  assert.equal((await BotSession.findOne({ telegram_id: 100 })).data.step, 'register_name');
+  await h.msg(100, 'Ali Valiyev');
+  const user = await User.findOne({ telegram_id: 100 });
+  assert.equal(user.full_name, 'Ali Valiyev');
+  assert.equal(user.password_hash, undefined);
+  assert.deepEqual(user.group_ids.map(String), [String(group._id)]);
+  await h.msg(100, `/start join_${group._id}`);
+  assert.equal(await User.countDocuments({ telegram_id: 100 }), 1);
+  const another = await GroupChat.create({ chat_id: -9001, group_name: 'IELTS' });
+  assert.equal((await attendance.roster(another)).length, 0);
+  assert.equal((await attendance.roster(group)).length, 1);
+});
+
+test('Standalone admin publishes HTML and audio without entering an answer key', async t => {
+  const mode = config.STANDALONE; config.STANDALONE = true;
+  t.after(() => { config.STANDALONE = mode; });
+  const h = harness();
+  await h.cb(900, 'am:sec:cefr:listening');
+  await h.msg(900, 'CEFR — HTML test 1');
+  await h.msg(900, null, { document: { file_id: 'test-html', file_unique_id: 'html', file_name: 'test.html', mime_type: 'text/html' } });
+  await h.msg(900, null, { audio: { file_id: 'test-audio', file_unique_id: 'audio', duration: 60 } });
+  await h.cb(900, 'ad:mdone');
+  const doc = await Test.findOne().lean();
+  assert.equal(doc.submission_mode, 'screenshot');
+  assert.equal(doc.answer_key.length, 0);
+  assert.deepEqual(doc.materials.map(m => m.file_id), ['test-html', 'test-audio']);
+  assert.equal(await BotSession.countDocuments({ telegram_id: 900 }), 0);
+});
+
+test('Material → file → contextual screenshot → confirmation → mandatory analysis → next file', async t => {
+  const saved = { STANDALONE: config.STANDALONE, GEMINI_API_KEY: config.GEMINI_API_KEY };
+  config.STANDALONE = true; config.GEMINI_API_KEY = 'fake-test';
+  t.after(() => { Object.assign(config, saved); });
+  const user = await student();
+  const group = await GroupChat.create({ chat_id: -123, group_name: '1-guruh' });
+  await User.updateOne({ _id: user._id }, { $set: { group_ids: [group._id] } });
+  const first = await exam(), second = await exam('reading', 2);
+  await Test.updateOne({ _id: first._id }, { $set: { submission_mode: 'screenshot', materials: [{ kind: 'document', file_id: 'html-test' }] } });
+  const h = harness(null, {
+    downloadScreenshot: async () => ({ bytes: Buffer.from('html-result'), mime: 'image/png' }),
+    readScreenshot: async () => ({ title: 'AI heading', score_type: 'correct', score: 32, maximum: 40, percent: 80, model: 'mock' }),
+  });
+  await h.cb(100, `mf:${first._id}`);
+  assert.ok(h.calls.some(c => c.method === 'sendDocument' && c.payload.document === 'html-test'));
+  assert.match(h.calls.at(-1).payload.text, /skrinshotini shu chatga yuboring/);
+  sessions.clear(); // Simulate process restart; persistent selected material must survive.
+  await h.msg(100, null, { photo: [{ file_id: 'result', file_unique_id: 'result' }] });
+  const row = await ScreenshotResult.findOne();
+  assert.equal(String(row.test), String(first._id));
+  assert.equal(row.title, first.title);
+  await h.cb(100, `ssok:${row._id}`);
+  assert.equal((await ScreenshotResult.findById(row._id)).needs_analysis, true);
+  assert.equal((await sectionState(user._id, 'ielts', 'reading')).rows[1].state, 'locked');
+  await h.msg(100, '/cancel');
+  await h.cb(100, `mf:${second._id}`);
+  assert.equal((await BotSession.findOne({ telegram_id: 100 })).data.step, 'material_analysis');
+  await h.msg(100, 'Keyingi safar matndagi sinonimlarni diqqat bilan solishtiraman.');
+  assert.equal((await ScreenshotResult.findById(row._id)).needs_analysis, false);
+  assert.equal((await sectionState(user._id, 'ielts', 'reading')).rows[1].state, 'open');
+  const sent = [];
+  await attendance.postReport({ sendMessage: async (_, text) => sent.push(text) }, group);
+  assert.match(sent.join(''), /32\/40/);
+  assert.ok(sent.join('').includes(first.title));
+});
 
 test('Screenshot confirmation is owned, idempotent, visible in API and cannot unlock analysis', async t => {
   const original = config.GEMINI_API_KEY;

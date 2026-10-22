@@ -26,6 +26,7 @@ const Test = mongoose.model(
       exam: { type: String, enum: ['ielts', 'cefr'], required: true },
       section: { type: String, enum: ['reading', 'listening', 'writing'], required: true },
       title: { type: String, required: true, trim: true },
+      submission_mode: { type: String, enum: ['answers', 'screenshot'], default: 'answers' },
       order: { type: Number, required: true },
       materials: [
         {
@@ -135,6 +136,10 @@ const LinkCode = mongoose.model('LinkCode', new mongoose.Schema({
 // HTML test natijasining skrinshoti: bot testlaridan alohida, tahlil qulfini ochmaydi.
 const ScreenshotResult = mongoose.model('ScreenshotResult', new mongoose.Schema({
   user: { type: ObjectId, ref: 'User', required: true },
+  test: { type: ObjectId, ref: 'Test' },
+  needs_analysis: { type: Boolean, default: false },
+  analysis: String,
+  analyzed_at: Date,
   telegram_id: { type: Number, required: true },
   file_id: { type: String, required: true },
   file_unique_id: { type: String, required: true, unique: true },
@@ -157,6 +162,7 @@ const ScreenshotResult = mongoose.model('ScreenshotResult', new mongoose.Schema(
 }, { timestamps: true, collection: 'bot_screenshot_results' })
   .index({ image_hash: 1 }, { unique: true, sparse: true })
   .index({ user: 1, submitted_at: 1 })
+  .index({ user: 1 }, { unique: true, partialFilterExpression: { needs_analysis: true } })
   .index({ status: 1, accepted_at: 1 }));
 
 // Retry yuborayotgan hisobotning matni va natijalar ro'yxati o'zgarmaydi.

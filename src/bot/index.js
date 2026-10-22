@@ -8,7 +8,7 @@ function createBot(options = {}) {
   // Student work, credentials and admin editing are private-chat only.
   bot.use(async (ctx, next) => {
     if (ctx.chat?.type === 'private') return next();
-    if (ctx.myChatMember || ctx.message?.migrate_to_chat_id || ctx.message?.migrate_from_chat_id) return next();
+    if (ctx.myChatMember || ctx.chatMember || ctx.message?.migrate_to_chat_id || ctx.message?.migrate_from_chat_id) return next();
     const command = /^\/(ulash|uzish|sozlamalar|davomat_vaqti|dars_kunlari|tolov_sanasi|davomat|tolov)(?:@\w+)?(?:\s|$)/;
     if (ctx.message?.text && command.test(ctx.message.text)) return next();
     if (ctx.callbackQuery) return ctx.answerCallbackQuery({ text: 'Botning shaxsiy chatini oching.' });
@@ -28,6 +28,7 @@ function createBot(options = {}) {
   });
 
   require('./student').register(bot);
+  require('./materials').register(bot);
   require('./admin').register(bot);
   require('./attendance').register(bot);
   require('./payments').register(bot);

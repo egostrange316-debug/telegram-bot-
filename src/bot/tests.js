@@ -1,4 +1,11 @@
-const { Test, Attempt } = require('../models/bot');
+const { Test, Attempt, ScreenshotResult } = require('../models/bot');
+
+async function pendingWork(userId) {
+  const attempt = await Attempt.findOne({ user: userId, status: { $in: ['analysis', 'grading'] } }).sort({ createdAt: 1 }).lean();
+  if (attempt) return attempt;
+  const screenshot = await ScreenshotResult.findOne({ user: userId, status: 'accepted', needs_analysis: true }).sort({ accepted_at: 1 }).lean();
+  return screenshot ? { ...screenshot, status: 'analysis', source: 'screenshot' } : null;
+}
 
 /**
  * Bo'limdagi testlar va har birining holati (o'quvchi uchun):
@@ -15,9 +22,10 @@ async function sectionState(userId, exam, section) {
     .sort({ createdAt: -1 })
     .lean();
   // A pending analysis blocks every section, including retakes and archived tests.
-  const pending = await Attempt.findOne({ user: userId, status: { $in: ['analysis', 'grading'] } })
-    .sort({ createdAt: 1 }).lean();
+  const pending = await pendingWork(userId);
   const doneIds = new Set(attempts.filter((a) => a.status === 'done').map((a) => String(a.test)));
+  const screenshots = await ScreenshotResult.find({ user: userId, test: { $in: tests.map(t => t._id) }, status: 'accepted', needs_analysis: { $ne: true } }).select('test').lean();
+  screenshots.forEach(r => doneIds.add(String(r.test)));
 
   let unlocked = !pending;
   const rows = tests.map((t) => {
@@ -41,4 +49,4 @@ async function canStart(userId, test) {
 
 const STATE_ICON = { done: '✅', analysis: '🧠', grading: '⏳', open: '🔓', locked: '🔒' };
 
-module.exports = { sectionState, canStart, STATE_ICON };
+module.exports = { sectionState, canStart, pendingWork, STATE_ICON };

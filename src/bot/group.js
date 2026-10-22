@@ -1,4 +1,6 @@
 const config = require('../config');
+const { InlineKeyboard } = require('grammy');
+const { rosterFilter, isMember } = require('../lib/enrollment');
 const { User } = require('../models/app');
 const { GroupChat } = require('../models/bot');
 const { parseHHMM, formatHHMM } = require('../lib/time');
@@ -20,19 +22,24 @@ const groupAdmin = (fn) => async (ctx) => {
 
 async function connectedGroup(ctx) {
   const g = await GroupChat.findOne({ chat_id: ctx.chat.id, enabled: true }).lean();
-  if (!g) await ctx.reply('Guruh hali ulanmagan. Avval: /ulash [ilovadagi guruh nomi]');
+  if (!g) await ctx.reply('Guruh hali ulanmagan. Avval: /ulash 1-guruh');
   return g;
 }
 
 function settingsText(g) {
   return (
-    `⚙️ <b>Sozlamalar</b>\nIlovadagi guruh: <b>${esc(g.group_name || "barcha o'quvchilar")}</b>\n` +
+    `⚙️ <b>Sozlamalar</b>\nGuruh: <b>${esc(g.group_name || g.title || "barcha o'quvchilar")}</b>\n` +
     `⏰ Davomat: <b>${g.attendance_time}</b> (${g.days.map((d) => DAY_NAMES[d]).join(', ')}) — ro'yxat admin uchun ${config.ATTENDANCE_OPEN_BEFORE_MIN} daqiqa oldin ochiladi\n` +
     `💰 To'lov hisoboti: har oyning <b>${g.pay_day}-kuni</b>, ${g.pay_time}`
   );
 }
 
 function register(bot) {
+  bot.on('chat_member', async ctx => {
+    if (!config.STANDALONE || isMember(ctx.chatMember.new_chat_member)) return;
+    const group = await GroupChat.findOne({ chat_id: ctx.chat.id }).select('_id').lean();
+    if (group) await User.updateOne({ telegram_id: ctx.chatMember.new_chat_member.user.id }, { $pull: { group_ids: group._id } });
+  });
   bot.on('message:migrate_to_chat_id', async (ctx) => {
     await GroupChat.updateOne({ chat_id: ctx.chat.id }, { $set: { chat_id: ctx.message.migrate_to_chat_id } });
   });
@@ -43,16 +50,17 @@ function register(bot) {
   bot.on('my_chat_member', async (ctx) => {
     const st = ctx.myChatMember.new_chat_member.status;
     if (inGroup(ctx) && ['member', 'administrator'].includes(st) && !['member', 'administrator'].includes(ctx.myChatMember.old_chat_member.status)) {
-      await ctx.reply("Salom! 👋 Davomat va to'lov hisobotlarini shu guruhga yuborib turaman.\nAdmin: <code>/ulash 1-guruh</code> (ilovadagi guruh nomi) deb yozing.", { parse_mode: 'HTML' }).catch(() => {});
+      await ctx.reply("Salom! 👋 Davomat va natijalarni shu guruhga yuborib turaman.\nBotni admin qiling, so‘ng <code>/ulash 1-guruh</code> deb yozing.", { parse_mode: 'HTML' }).catch(() => {});
     }
     if (inGroup(ctx) && ['left', 'kicked'].includes(st)) await GroupChat.updateOne({ chat_id: ctx.chat.id }, { $set: { enabled: false } });
   });
 
   bot.command('ulash', groupAdmin(async (ctx) => {
-    const name = ctx.match.trim() || null;
+    const name = ctx.match.trim() || (config.STANDALONE ? ctx.chat.title || 'Guruh' : null);
+    if (name?.length > 80) return ctx.reply('Guruh nomi 80 belgidan oshmasin.');
     const filter = { role: 'student', ...(name ? { group_name: name } : {}) };
-    const count = await User.countDocuments(filter);
-    if (name && !count) {
+    let count = await User.countDocuments(filter);
+    if (!config.STANDALONE && name && !count) {
       const names = (await User.distinct('group_name', { role: 'student' })).filter(Boolean);
       return ctx.reply(`❌ Ilovada «${esc(name)}» guruhi topilmadi.\nMavjud guruhlar: ${names.map(esc).join(', ') || '—'}`, { parse_mode: 'HTML' });
     }
@@ -61,8 +69,13 @@ function register(bot) {
       { $set: { title: ctx.chat.title, group_name: name, enabled: true } },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     ).lean();
+    if (config.STANDALONE) count = await User.countDocuments(rosterFilter(g));
     const warn = count > attendance.MAX_SHEET ? `\n\nDavomat ro‘yxati ${attendance.MAX_SHEET} tadan sahifalanadi.` : '';
-    return ctx.reply(`✅ Guruh ulandi. O'quvchilar: ${count} ta.\n\n${settingsText(g)}${warn}`, { parse_mode: 'HTML' });
+    const username = config.BOT_USERNAME || ctx.me.username;
+    const link = config.STANDALONE ? new InlineKeyboard().url('📝 Botga ro‘yxatdan o‘tish', `https://t.me/${username}?start=join_${g._id}`) : undefined;
+    return ctx.reply(`✅ Guruh ulandi. O'quvchilar: ${count} ta.\n\n${settingsText(g)}${warn}` +
+      (config.STANDALONE ? '\n\nO‘quvchilar pastdagi tugmani bosib ism-familiyasini yozsin.' : ''),
+      { parse_mode: 'HTML', reply_markup: link });
   }));
 
   bot.command('uzish', groupAdmin(async (ctx) => {

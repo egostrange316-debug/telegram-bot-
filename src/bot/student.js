@@ -9,7 +9,8 @@ const { User } = require('../models/app');
 const { TgLink, Test, Attempt } = require('../models/bot');
 const { parseAnswers, grade, ieltsBand, cefrLevel } = require('../lib/grading');
 const { userResults, leaderboard, chartConfig, SECTION_NAMES, EXAM_NAMES, TREND_TEXT } = require('../lib/stats');
-const { sectionState, canStart, STATE_ICON } = require('./tests');
+const { sectionState, canStart, pendingWork, STATE_ICON } = require('./tests');
+const registration = require('./registration');
 const {
   getSession, setSession, clearSession, steps, esc, linkedUser, isAdmin, adminChatIds,
   BTN, sendMenu, sendMaterial, materialFromMessage, safeSend,
@@ -21,6 +22,7 @@ const cancelKb = new InlineKeyboard().text('✖️ Bekor qilish', 'cancel');
 
 async function start(ctx) {
   if (ctx.chat.type !== 'private') return;
+  if (config.STANDALONE) return registration.start(ctx);
   if (String(ctx.match || '').startsWith('link_')) {
     const code = await consumeLinkCode(ctx.match.slice(5));
     if (!code || !(await User.exists({ _id: code.user }))) return ctx.reply('Ulash havolasi eskirgan. Ilovadan yangisini oling.');
@@ -41,6 +43,7 @@ async function start(ctx) {
 
 async function askLogin(ctx) {
   if (ctx.chat.type !== 'private') return;
+  if (config.STANDALONE) return registration.start(ctx);
   setSession(ctx.from.id, { step: 'login_name' });
   return ctx.reply(
     "Assalomu alaykum! 👋\nBu — o'quv markazimizning IELTS va CEFR boti.\n\n" +
@@ -109,7 +112,7 @@ async function showSection(ctx, exam, section, asNew = false, requestedPage = 0)
   const title = `<b>${EXAM_NAMES[exam]} · ${SECTION_NAMES[section]}</b>`;
   if (!rows.length) return out(`${title}\n\nHozircha test joylanmagan.`, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('⬅️ Orqaga', `ex:${exam}`) });
   const kb = new InlineKeyboard();
-  if (pending?.status === 'analysis') kb.text('🧠 Tugallanmagan tahlil', `an:${pending._id}`).row();
+  if (pending?.status === 'analysis') kb.text('🧠 Tugallanmagan tahlil', `${pending.source === 'screenshot' ? 'sa' : 'an'}:${pending._id}`).row();
   const pages = Math.max(1, Math.ceil(rows.length / 40));
   const page = Math.min(Math.max(0, requestedPage), pages - 1);
   rows.slice(page * 40, (page + 1) * 40).forEach((r, i) => kb.text(`${STATE_ICON[r.state]} ${page * 40 + i + 1}. ${r.test.title}`.slice(0, 60), `t:${r.test._id}`).row());
@@ -121,10 +124,12 @@ async function showSection(ctx, exam, section, asNew = false, requestedPage = 0)
 }
 
 async function showTest(ctx, testId) {
+  if (config.STANDALONE) return require('./materials').openMaterial(ctx, testId);
   const user = await requireStudent(ctx);
   if (!user) return;
   const test = await Test.findById(testId).lean();
   if (!test || !test.active) return ctx.answerCallbackQuery({ text: 'Test topilmadi', show_alert: true });
+  if (test.submission_mode === 'screenshot') return require('./materials').openMaterial(ctx, testId);
   const { rows, pending } = await sectionState(user._id, test.exam, test.section);
   const row = rows.find((r) => String(r.test._id) === String(testId));
   if (!row) return ctx.answerCallbackQuery({ text: 'Test topilmadi', show_alert: true });
@@ -149,10 +154,12 @@ async function showTest(ctx, testId) {
 }
 
 async function startTest(ctx, testId) {
+  if (config.STANDALONE) return require('./materials').openMaterial(ctx, testId);
   const user = await requireStudent(ctx);
   if (!user) return;
   const test = await Test.findById(testId).lean();
   if (!test || !test.active) return ctx.answerCallbackQuery({ text: 'Test topilmadi', show_alert: true });
+  if (test.submission_mode === 'screenshot') return require('./materials').openMaterial(ctx, testId);
   const { rows, pending } = await sectionState(user._id, test.exam, test.section);
   const row = rows.find((r) => String(r.test._id) === String(testId));
   if (!row || !['open', 'done'].includes(row.state)) {
@@ -262,6 +269,7 @@ steps.writing = async (ctx, s) => {
 async function beginAnalysis(ctx, attemptId) {
   const user = await linkedUser(ctx.from.id);
   const a = await Attempt.findById(attemptId).populate('test', 'title').lean();
+  if (!a) return require('./screenshots').beginMaterialAnalysis(ctx, attemptId);
   if (!user || !a || String(a.user) !== String(user._id)) return ctx.reply('Tahlil topilmadi.');
   if (a.status === 'done') return ctx.reply('✅ Bu test tahlil qilingan.');
   if (a.status !== 'analysis') return ctx.reply('⏳ Bu ish hali tekshirilmoqda.');
@@ -390,13 +398,15 @@ async function showRating(ctx, exam) {
 const examPickKb = (prefix) => new InlineKeyboard().text('🇬🇧 IELTS', `${prefix}:ielts`).text('🇪🇺 CEFR', `${prefix}:cefr`);
 
 function register(bot) {
+  bot.command('id', ctx => ctx.reply(`Telegram ID: ${ctx.from.id}`));
   bot.command('start', start);
   bot.command('login', askLogin);
   bot.command('tahlil', async (ctx) => {
     const user = await requireStudent(ctx);
     if (!user) return null;
-    const pending = await Attempt.findOne({ user: user._id, status: { $in: ['analysis', 'grading'] } }).sort({ createdAt: 1 }).lean();
+    const pending = await pendingWork(user._id);
     if (!pending) return ctx.reply('✅ Tugallanmagan tahlil yo‘q.');
+    if (pending.source === 'screenshot') return require('./screenshots').beginMaterialAnalysis(ctx, String(pending._id));
     return beginAnalysis(ctx, String(pending._id));
   });
   bot.command('menu', (ctx) => ctx.chat.type === 'private' && sendMenu(ctx));

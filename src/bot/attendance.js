@@ -3,13 +3,13 @@ const { User, Attendance } = require('../models/app');
 const { GroupChat, ScreenshotResult, AttendanceReport } = require('../models/bot');
 const { scoreLabel } = require('../lib/screenshot-reader');
 const { EXAM_NAMES, SECTION_NAMES } = require('../lib/stats');
+const { rosterFilter } = require('../lib/enrollment');
 const { dateKey, humanDate } = require('../lib/time');
 const { esc, isAdmin, adminChatIds, actorUserId } = require('./common');
 const { deliverOnce, sendReport } = require('../lib/delivery');
 
 function roster(group) {
-  const filter = { role: 'student' };
-  if (group.group_name) filter.group_name = group.group_name;
+  const filter = rosterFilter(group);
   return User.find(filter).select('full_name group_name status subscription_end_date').sort({ full_name: 1, _id: 1 }).lean();
 }
 const compact = (key) => key.replace(/-/g, '').slice(2);
@@ -128,7 +128,7 @@ function register(bot) {
     const date = expand(d);
     const group = await GroupChat.findOne({ _id: gid, enabled: true }).lean();
     if (!group) return ctx.answerCallbackQuery({ text: 'Guruh topilmadi' });
-    const student = await User.findOne({ _id: uid, role: 'student', ...(group.group_name ? { group_name: group.group_name } : {}) }).select('_id').lean();
+    const student = await User.findOne({ _id: uid, ...rosterFilter(group) }).select('_id').lean();
     if (!student) return ctx.answerCallbackQuery({ text: 'O‘quvchi bu guruhda emas' });
     const cur = await Attendance.findOne({ user: uid, date }).lean();
     const next = !cur ? 'present' : cur.status === 'present' ? 'absent' : null;

@@ -62,6 +62,8 @@ async function actorUserId(telegramId) {
 }
 
 const BTN = {
+  materials: '📚 Materiallar',
+  addMaterial: '➕ Material qo‘shish',
   ielts: '🇬🇧 IELTS',
   cefr: '🇪🇺 CEFR',
   results: '📊 Natijalarim',
@@ -79,12 +81,15 @@ const BTN = {
 function mainMenu({ student, admin }) {
   const kb = new Keyboard();
   if (student) {
-    kb.text(BTN.ielts).text(BTN.cefr).row().text(BTN.results).text(BTN.rating).row();
-    kb.text(BTN.screenshot).row();
+    kb.text(BTN.materials).row().text(BTN.results);
+    if (!config.STANDALONE) kb.text(BTN.rating);
+    kb.row();
+    if (!config.STANDALONE) kb.text(BTN.ielts).text(BTN.cefr).row().text(BTN.screenshot).row();
     if (config.WEBAPP_URL) kb.webApp(BTN.chart, config.WEBAPP_URL).row();
   }
   if (admin) {
-    kb.text(BTN.addTest).text(BTN.tests).row().text(BTN.writing).text(BTN.groups).row().text(BTN.payments).row();
+    kb.text(BTN.addMaterial).text(BTN.tests).row().text(BTN.groups).text(BTN.payments).row();
+    if (!config.STANDALONE) kb.text(BTN.addTest).text(BTN.writing).row();
   }
   if (student) kb.text(BTN.logout);
   return kb.resized();

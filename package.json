@@ -1,7 +1,7 @@
 {
   "name": "enzo-telegram-bot",
   "version": "1.1.0",
-  "description": "O'quv markaz ilovasi (ENZO) uchun Telegram bot: IELTS/CEFR testlari, tahlil, reyting, davomat va to'lov eslatmalari",
+  "description": "ENZO mustaqil Telegram bot: IELTS/CEFR materiallari, skrinshot natijalari, tahlil, davomat va to'lov hisobotlari",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",

@@ -3,8 +3,10 @@ require('dotenv').config();
 const list = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
 
 const config = {
+  // Standart: ilovasiz, Telegram orqali ro'yxatdan o'tish.
+  STANDALONE: process.env.STANDALONE !== 'false',
   BOT_TOKEN: process.env.BOT_TOKEN,
-  // Ilova bilan BIR XIL baza: bot o'quvchilarni (users) va davomatni (attendances) shu yerdan oladi/yozadi
+  // Mustaqil rejimda botning o'z bazasi; eski ilova rejimida ilova bazasi.
   MONGO_URI: process.env.MONGO_URI,
   // Ilovaning JWT_SECRET'i: ilova tokeni bilan bot API'siga kirish uchun (natijalar, grafik, reyting)
   JWT_SECRET: process.env.JWT_SECRET,

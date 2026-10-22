@@ -1,0 +1,20 @@
+services:
+  bot:
+    environment:
+      STANDALONE: "true"
+      MONGO_URI: mongodb://mongo:27017/enzo_bot
+    depends_on:
+      mongo:
+        condition: service_healthy
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - bot_mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+volumes:
+  bot_mongo_data:

@@ -1,9 +1,9 @@
 const mongoose = require('mongoose');
+const config = require('../config');
 
 /**
- * Ilova (ENZO-APP backend) modellari — bot SHU kolleksiyalardan foydalanadi, yangi nusxa yaratmaydi.
- * Sxemalar `strict: false`: bot faqat kerakli maydonlarni o'qiydi/yozadi, ilovaning boshqa maydonlariga tegmaydi.
- * Ilova sxemasi o'zgarsa ham bot buzilmaydi.
+ * Standalone: bot_students / bot_attendances. Ilova akkaunti va paroli kerak emas.
+ * Faqat STANDALONE=false rejimida eski ENZO users / attendances kolleksiyalari ishlatiladi.
  */
 const userSchema = new mongoose.Schema(
   {
@@ -12,12 +12,15 @@ const userSchema = new mongoose.Schema(
     password_hash: String,
     role: String,
     group_name: String,
+    telegram_id: Number,
+    group_ids: [{ type: mongoose.Schema.Types.ObjectId, ref: 'GroupChat' }],
     status: String,
     subscription_end_date: Date,
     payments: { type: Array, default: undefined },
   },
-  { strict: false, timestamps: true, collection: 'users' }
+  { strict: false, timestamps: true, collection: config.STANDALONE ? 'bot_students' : 'users' }
 );
+if (config.STANDALONE) userSchema.index({ telegram_id: 1 }, { unique: true, sparse: true });
 
 const attendanceSchema = new mongoose.Schema(
   {
@@ -26,7 +29,7 @@ const attendanceSchema = new mongoose.Schema(
     status: { type: String, enum: ['present', 'absent'], required: true },
     by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
-  { strict: false, timestamps: true, collection: 'attendances' }
+  { strict: false, timestamps: true, collection: config.STANDALONE ? 'bot_attendances' : 'attendances' }
 );
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);

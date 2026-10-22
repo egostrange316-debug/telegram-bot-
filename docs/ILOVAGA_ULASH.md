@@ -1,5 +1,13 @@
 # Botni ilovaga ulash
 
+> **2026-10-22:** foydalanuvchi ilovaga ulashni bekor qildi. Hozir bot standart holatda
+> mustaqil ishlaydi (`STANDALONE=true`). Joriy sozlash: [README](../README.md).
+> Quyidagi ilova integratsiyasi faqat alohida `STANDALONE=false` tanlansa qo‘llanadi;
+> mustaqil bot uchun ilova JWT yoki akkaunti talab qilinmaydi.
+> «Materiallar»dan olingan test skrinshoti tanlangan materialga bog‘lanadi va
+> tasdiqdan keyin majburiy tahlil talab qiladi. Quyidagi eski erkin `/skrin` oqimi
+> faqat ilova rejimida materialga bog‘lanmagan natijalar uchun saqlangan.
+
 Tekshirilgan backend: `egostrange316-debug/ENZO-APP` (`main`, 2026-10-21).
 `models/User.js`, `models/Attendance.js`, `controllers/authController.js` bilan mos:
 MongoDB `users` va `attendances`, `name_key/password_hash`, JWT `{id}` + HS256.
