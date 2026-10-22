@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { mongoUri } = require('./lib/mongo-uri');
 
 const list = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
 
@@ -7,7 +8,7 @@ const config = {
   STANDALONE: process.env.STANDALONE !== 'false',
   BOT_TOKEN: process.env.BOT_TOKEN,
   // Mustaqil rejimda botning o'z bazasi; eski ilova rejimida ilova bazasi.
-  MONGO_URI: process.env.MONGO_URI,
+  MONGO_URI: mongoUri(),
   // Ilovaning JWT_SECRET'i: ilova tokeni bilan bot API'siga kirish uchun (natijalar, grafik, reyting)
   JWT_SECRET: process.env.JWT_SECRET,
   // ENZO-APP bilan bir xil AI xizmati. Kalit faqat serverda saqlanadi.

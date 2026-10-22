@@ -1,0 +1,71 @@
+# Two continuously running services. Review paid compute/storage before Apply.
+# Secrets are entered in Render; never put them in this file.
+services:
+  - type: worker
+    name: enzo-material-bot
+    runtime: docker
+    repo: https://github.com/egostrange316-debug/telegram-bot-
+    branch: claude/adoring-cray-tdkpq2
+    region: frankfurt
+    plan: 0.5c-512mb
+    dockerfilePath: ./Dockerfile
+    autoDeployTrigger: commit
+    numInstances: 1
+    # A disk makes Render stop the old instance before starting its replacement.
+    # Telegram long polling and the scheduler must have one active process.
+    disk:
+      name: enzo-worker-single-instance
+      mountPath: /var/lib/enzo-worker
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: STANDALONE
+        value: "true"
+      - key: BOT_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
+      - key: GEMINI_SCREENSHOT_MODEL
+        value: gemini-3.1-flash-lite
+      - key: MONGO_HOST
+        fromService:
+          name: enzo-material-mongo
+          type: pserv
+          property: host
+      - key: MONGO_PORT
+        value: "27017"
+      - key: MONGO_DATABASE
+        value: enzo_bot
+      - key: MONGO_AUTH_SOURCE
+        value: admin
+      - key: MONGO_USER
+        fromService:
+          name: enzo-material-mongo
+          type: pserv
+          envVarKey: MONGO_INITDB_ROOT_USERNAME
+      - key: MONGO_PASSWORD
+        fromService:
+          name: enzo-material-mongo
+          type: pserv
+          envVarKey: MONGO_INITDB_ROOT_PASSWORD
+
+  - type: pserv
+    name: enzo-material-mongo
+    runtime: image
+    image:
+      url: docker.io/library/mongo:7
+    region: frankfurt
+    plan: 0.5c-512mb
+    numInstances: 1
+    disk:
+      name: enzo-mongo-data
+      mountPath: /data/db
+      sizeGB: 1
+    envVars:
+      - key: MONGO_INITDB_ROOT_USERNAME
+        value: enzo_root
+      - key: MONGO_INITDB_ROOT_PASSWORD
+        generateValue: true

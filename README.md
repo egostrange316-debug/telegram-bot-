@@ -75,6 +75,22 @@ npm start
 Bot bitta doimiy ishlaydigan process bo‘lishi kerak. Uyquga ketadigan/serverless hosting
 kunlik jadval uchun mos emas. `GET /health` baza ulanganida 200 qaytaradi.
 
+### Render
+
+`render.yaml` doimiy bot workerini va ichki MongoDB xizmatini tayyorlaydi.
+Ikkala xizmat pullik; Apply bosishdan oldin tariflarni tekshiring.
+Kalitlar faylda yo'q, Render'ning maxfiy sozlamalarida beriladi.
+[Render'da joylashtirish yo'riqnomasi](docs/RENDER.md).
+
+### Keyin yana admin qo'shish
+
+Hostingdagi `ADMIN_IDS` qiymatiga barcha adminlarning raqamli Telegram IDlarini
+vergul bilan kiriting, masalan `111111111,222222222`. Mavjud admin IDlarini ham qoldiring.
+Sozlamani saqlab botni yangi sozlama bilan qayta ishga tushiring (Render'da redeploy).
+Yangi admin botning shaxsiy chatida `/start` qiladi. Guruhni ulashi uchun Telegram
+guruhida ham administrator bo'lishi kerak. Hozir bu ish hosting sozlamasi orqali
+bajariladi; bot menyusida admin qo'shish tugmasi yo'q.
+
 ## Guruhni sozlash
 
 1. Admin botning shaxsiy chatida `/start` qiladi. IDni bilish uchun `/id`.

@@ -2,7 +2,7 @@
 
 - ZIPdagi dastlabki fayllar repo bilan to‘liq solishtirildi: farq yo‘q edi.
 - `npm run check`: JavaScript sintaksis tekshiruvi o‘tdi.
-- `npm run test:unit`: 41/41 tekshiruv o‘tdi (20 asosiy, 10 skrinshot, 11 mustaqil bot/material oqimi).
+- `npm run test:unit`: 45/45 tekshiruv o‘tdi (20 asosiy, 10 skrinshot, 11 mustaqil bot/material oqimi, 4 MongoDB ulanish sozlamasi).
 - React komponenti JSX parserdan o‘tdi; Mini App DOM sinovida SVG chizish, IELTS/CEFR almashtirish, HTML escaping, URLdan tokenni olish va 401 xabari tekshirildi. Skrinshotning alohida grafigi/tarixi, nol ball va rasm nomidagi HTML escaping ham tekshirildi. Bu piksel/render skrinshot tekshiruvi emas.
 - `tests/workflows.test.js`: haqiqiy MongoDB bilan ishlaydigan 22 jarayon testi bor (16 asosiy, 3 skrinshot, 3 mustaqil bot/material jarayoni).
 - Ushbu ish muhitida MongoDB binari `open: Operation not permitted` sabab ishga tushmadi;
@@ -14,12 +14,17 @@
 
 Billing cheklovi bartaraf etilgach Actions orqali qayta ishga tushiring yoki kompyuteringizda
 `npm ci && npm test` bajaring. Testlar alohida `enzo_bot_test` bazasini ishlatadi.
-Jonli Telegram bot, haqiqiy ilova bazasi va hosting bilan yakuniy qabul sinovi hali bajarilmagan:
-ularning sozlamalari ushbu vazifada berilmagan.
+Jonli Telegram bot va hosting bilan yakuniy qabul sinovi hali bajarilmagan.
+Bot/Gemini kalitlari hamda admin ID maxfiy mahalliy sozlamaga kiritildi; repoga kiritilmadi.
+Railway loyiha yaratish vaqtida `Paused temporarily` qaytardi. Render Blueprint tayyorlandi;
+workspace tanlash, platforma validatsiyasi va joylashtirish hali bajarilmagan.
 
-Skrinshot testlarida Gemini va Telegram tarmoq javoblari soxta sinov javoblari bilan berildi;
-haqiqiy AI so‘rovi yuborilmadi. O‘qish aniqligi, ayniqsa foydalanuvchining alohida HTML
-natija sahifasi bilan, namunaviy skrinshot va jonli API kaliti orqali hali tekshirilishi kerak.
+Avtomatik skrinshot unit testlarida Gemini va Telegram javoblari soxta sinov javoblari bilan berildi.
+Alohida jonli sinovda Telegram `getMe` va Gemini model so‘rovi o‘tdi. Gemini sun’iy IELTS
+Reading natija rasmidagi 27/40 ballni to‘g‘ri o‘qidi. Dastlabki Node fetch urinishida xizmat
+xatosi kuzatildi; muvaffaqiyatli so‘rov Python HTTP transporti orqali, botning o‘z prompti,
+JSON sxemasi va tekshiruv funksiyasi bilan bajarildi. Bu to‘liq Telegram → bot → Gemini
+qabul sinovi emas. Foydalanuvchining haqiqiy HTML natija skrinshoti bilan sinov hali kerak.
 Yangi MongoDB jarayonlari akkauntga tegishlilik, takroriy tasdiq, tahlil qulfini saqlash,
 API orqali shaxsiy natija, AI xatosi, guruh chegarasi, qayta yuborish va kech kelgan natijani qamraydi.
 
