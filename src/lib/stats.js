@@ -1,4 +1,3 @@
-const mongoose = require('mongoose');
 const { Attempt, ScreenshotResult } = require('../models/bot');
 const { scoreLabel } = require('./screenshot-reader');
 const { User } = require('../models/app');
@@ -124,6 +123,6 @@ function chartConfig(result) {
   };
 }
 
-const isId = (s) => mongoose.isValidObjectId(s);
+const isId = (s) => typeof s === 'string' && /^[a-f\d]{24}$/i.test(s);
 
 module.exports = { SECTION_NAMES, EXAM_NAMES, TREND_TEXT, trend, userResults, leaderboard, chartConfig, isId };

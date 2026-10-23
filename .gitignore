@@ -1,3 +1,9 @@
 node_modules/
 .env
 *.log
+
+.env.*
+!.env.example
+supabase/.temp/
+supabase/.branches/
+tests/.generated-flow.cjs

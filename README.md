@@ -35,7 +35,16 @@ JPG/PNG/WEBP, 6 MB gacha. Bir o‘quvchiga 24 soatda 10 ta AI o‘qish urinishi.
 Bir xil Telegram fayli va bir xil fayl xeshi takroriy natijani cheklaydi.
 Skrinshot ballari shaxsiy tarix/grafikda alohida ko‘rinadi, markaz reytingiga qo‘shilmaydi.
 
-## Serverni ishga tushirish
+## Supabase orqali bepul hosting
+
+Supabase Edge Function botni Telegram webhook orqali ishlatadi. Ma’lumotlar Postgres’da,
+kalitlar shifrlangan Vault’da saqlanadi. Supabase Cron har daqiqada davomat/to‘lov jadvalini
+tekshiradi va tugallanmay qolgan Telegram yangilanishlarini tiklaydi. Alohida MongoDB serveri
+bu variantda kerak emas. Bepul tarif limitlari va Gemini kvotalari amal qiladi.
+
+[Supabase o‘rnatish va boshqarish yo‘riqnomasi](docs/SUPABASE.md).
+
+## Node.js / Docker orqali ishga tushirish
 
 Kerakli sozlamalar `.env.example`da:
 
@@ -72,8 +81,8 @@ npm ci
 npm start
 ```
 
-Bot bitta doimiy ishlaydigan process bo‘lishi kerak. Uyquga ketadigan/serverless hosting
-kunlik jadval uchun mos emas. `GET /health` baza ulanganida 200 qaytaradi.
+Node.js/MongoDB varianti bitta doimiy ishlaydigan process talab qiladi.
+Supabase varianti yuqoridagi alohida webhook va Cron kirish nuqtalaridan foydalanadi. `GET /health` baza ulanganida 200 qaytaradi.
 
 ### Render
 
@@ -84,9 +93,11 @@ Kalitlar faylda yo'q, Render'ning maxfiy sozlamalarida beriladi.
 
 ### Keyin yana admin qo'shish
 
-Hostingdagi `ADMIN_IDS` qiymatiga barcha adminlarning raqamli Telegram IDlarini
+Supabase’da Vault ichidagi `enzo_ADMIN_IDS` qiymatiga (batafsil: [yo‘riqnoma](docs/SUPABASE.md)),
+Node.js hostingida esa `ADMIN_IDS` qiymatiga barcha adminlarning raqamli Telegram IDlarini
 vergul bilan kiriting, masalan `111111111,222222222`. Mavjud admin IDlarini ham qoldiring.
-Sozlamani saqlab botni yangi sozlama bilan qayta ishga tushiring (Render'da redeploy).
+Supabase o‘zgarishni keyingi so‘rovlarda bir daqiqa ichida oladi. Node.js variantini yangi
+sozlama bilan qayta ishga tushiring (Render’da redeploy).
 Yangi admin botning shaxsiy chatida `/start` qiladi. Guruhni ulashi uchun Telegram
 guruhida ham administrator bo'lishi kerak. Hozir bu ish hosting sozlamasi orqali
 bajariladi; bot menyusida admin qo'shish tugmasi yo'q.
@@ -127,13 +138,16 @@ Telegram xabarni olgach, bazaga qayd yozilishidan oldin process uzilsa, takror y
 ## Ma’lumotlar va tekshiruv
 
 Mustaqil rejim `bot_students` va `bot_attendances` kolleksiyalaridan foydalanadi.
-Materiallar, natijalar, suhbat bosqichlari va hisobot navbati ham botning MongoDB bazasida saqlanadi.
+Supabase variantida shu hujjatlar Postgres `enzo_documents_store` jadvalida,
+Node.js variantida MongoDB kolleksiyalarida saqlanadi. Telegram yangilanishlari Supabase’da
+alohida `enzo_updates` navbatiga yoziladi. Jadval va RPC funksiyalar faqat server kalitiga ochiq.
 Rasm Telegramdan server xotirasiga olinib Gemini’ga yuboriladi; diskka yozilmaydi.
 Tasdiqlanmagan skrinshot yozuvlari 7 kundan keyin o‘chadi, tasdiqlangan natijalar tarixda qoladi.
 
 ```bash
 npm run check
 npm run test:unit
+npm run test:postgres
 npm test
 ```
 

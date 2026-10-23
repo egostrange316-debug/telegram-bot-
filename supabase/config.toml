@@ -1,0 +1,5 @@
+project_id = "enzo-material-bot"
+
+[functions.enzo-bot]
+verify_jwt = false
+entrypoint = "./functions/enzo-bot/index.ts"
