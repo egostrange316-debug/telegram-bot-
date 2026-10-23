@@ -413,9 +413,15 @@ var require_delivery = __commonJS({
     async function sendReport(api, chatId, text, key) {
       for (const [index, part] of messageChunks(text).entries()) {
         const send = () => api.sendMessage(chatId, part, { parse_mode: "HTML" });
-        if (key) await deliverOnce(`${key}:part:${index}`, send);
-        else await send();
+        if (key) {
+          const partKey = `${key}:part:${index}`;
+          if (!await deliverOnce(partKey, send)) {
+            const delivery = await JobLog.findOne({ key: partKey }).lean();
+            if (!delivery || delivery.state && delivery.state !== "done") return false;
+          }
+        } else await send();
       }
+      return true;
     }
     module.exports = { deliverOnce, messageChunks, sendReport };
   }
@@ -1827,9 +1833,10 @@ Belgilangan: ${done}/${students.length} \xB7 Sahifa ${page + 1}/${pages}`;
           }
         } else snapshot = built;
       }
-      await sendReport(api, group.chat_id, snapshot.text, key);
+      if (!await sendReport(api, group.chat_id, snapshot.text, key)) return;
       if (snapshot.result_ids.length) await ScreenshotResult.updateMany({ _id: { $in: snapshot.result_ids } }, {
-        $addToSet: { report_chats: group.chat_id }
+        $addToSet: { report_chats: group.chat_id },
+        $unset: { file_id: 1 }
       });
     }
     function screenshotLines(rows, students) {

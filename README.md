@@ -142,6 +142,10 @@ Supabase variantida shu hujjatlar Postgres `enzo_documents_store` jadvalida,
 Node.js variantida MongoDB kolleksiyalarida saqlanadi. Telegram yangilanishlari Supabase’da
 alohida `enzo_updates` navbatiga yoziladi. Jadval va RPC funksiyalar faqat server kalitiga ochiq.
 Rasm Telegramdan server xotirasiga olinib Gemini’ga yuboriladi; diskka yozilmaydi.
+Guruh hisoboti to‘liq yuborilgach, skrinshotning Telegram `file_id` havolasi bazadan o‘chadi.
+Yuborish xato bersa yoki davom etayotgan bo‘lsa, havola qayta urinishgacha qoladi.
+Ball, tahlil va grafik tarixi hamda rasmni qayta olishga yaramaydigan takrorlanish
+identifikatorlari (`file_unique_id`, SHA-256) saqlanadi. Telegram chatidagi rasm o‘chirilmaydi.
 Tasdiqlanmagan skrinshot yozuvlari 7 kundan keyin o‘chadi, tasdiqlangan natijalar tarixda qoladi.
 
 ```bash

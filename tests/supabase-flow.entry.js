@@ -11,7 +11,7 @@ const { dateKey } = require('../src/lib/time');
 module.exports = async function run(rpc) {
   models.configureDatabase(rpc);
   Object.assign(config, { BOT_TOKEN: '123456789:TEST_ONLY', GEMINI_API_KEY: 'fixture-key', ADMIN_IDS: [991000009], CHART_URL: '' });
-  const { User, GroupChat, Test, ScreenshotResult, BotSession, Attendance } = models;
+  const { User, GroupChat, Test, ScreenshotResult, BotSession, Attendance, JobLog } = models;
   const checks = [], calls = []; let seq = 1;
   const assert = (condition, label) => { if (!condition) throw new Error(label); checks.push(label); };
   const bot = createBot({ screenshots: {
@@ -52,13 +52,28 @@ module.exports = async function run(rpc) {
     await cb(uid,`ssok:${result._id}`);
     let state=await sectionState(user._id,'ielts','reading');
     assert(state.rows[1].state==='locked','analysis blocks next material');
-    await msg(uid,'I confused synonyms and will review each incorrect answer carefully.');
-    state=await sectionState(user._id,'ielts','reading');
-    assert(state.rows[0].state==='done'&&state.rows[1].state==='open','analysis unlocks next material');
     await Attendance.create({user:user._id,date:dateKey(),status:'present'});
+    let failed=false;
+    try { await attendance.postReport({sendMessage:async()=>{throw new Error('fixture offline');}},group,dateKey(),'fixture:report'); }
+    catch(error) { if(error.message!=='fixture offline') throw error; failed=true; }
+    result=await ScreenshotResult.findOne({_id:result._id});
+    assert(failed&&result.file_id==='fixture-result'&&result.report_chats.length===0,'failed report retains screenshot reference');
+    await JobLog.updateOne({key:'fixture:report:part:0'},{$set:{state:'running',lease_until:new Date(Date.now()+60_000)}});
+    await attendance.postReport(bot.api,group,dateKey(),'fixture:report');
+    result=await ScreenshotResult.findOne({_id:result._id});
+    assert(result.file_id==='fixture-result'&&result.report_chats.length===0,'in-flight report retains screenshot reference');
+    await JobLog.updateOne({key:'fixture:report:part:0'},{$set:{state:'failed'}});
     await attendance.postReport(bot.api,group,dateKey(),'fixture:report');
     const sends=calls.filter(x=>x.method==='sendMessage'&&x.payload.chat_id===chat&&x.payload.text?.includes('27/40'));
     assert(sends.length===1&&sends[0].payload.text.includes('Fixture Student'),'attendance contains accepted screenshot');
+    result=await ScreenshotResult.findOne({_id:result._id});
+    assert(result.file_id===undefined&&result.report_chats.includes(chat),'completed report removes screenshot reference');
+    assert(result.file_unique_id==='fixture-result'&&result.image_hash?.length===64,'non-downloadable duplicate fingerprints remain');
+    state=await sectionState(user._id,'ielts','reading');
+    assert(result.needs_analysis&&state.rows[1].state==='locked','report cleanup preserves analysis lock');
+    await msg(uid,'I confused synonyms and will review each incorrect answer carefully.');
+    state=await sectionState(user._id,'ielts','reading');
+    assert(state.rows[0].state==='done'&&state.rows[1].state==='open','analysis unlocks next material after cleanup');
     await attendance.postReport(bot.api,group,dateKey(),'fixture:report');
     assert(calls.filter(x=>x.method==='sendMessage'&&x.payload.chat_id===chat&&x.payload.text?.includes('27/40')).length===1,'scheduled delivery deduplicates');
     assert((await payments.markPaid(user._id)).ok,'payment recording');

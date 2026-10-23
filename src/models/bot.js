@@ -141,7 +141,8 @@ const ScreenshotResult = mongoose.model('ScreenshotResult', new mongoose.Schema(
   analysis: String,
   analyzed_at: Date,
   telegram_id: { type: Number, required: true },
-  file_id: { type: String, required: true },
+  // Accepted results lose the downloadable reference after their group report.
+  file_id: { type: String, required() { return this.status !== 'accepted'; } },
   file_unique_id: { type: String, required: true, unique: true },
   image_hash: { type: String },
   exam: { type: String, enum: ['ielts', 'cefr'], required: true },

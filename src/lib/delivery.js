@@ -42,9 +42,17 @@ function messageChunks(text, limit = 3800) {
 async function sendReport(api, chatId, text, key) {
   for (const [index, part] of messageChunks(text).entries()) {
     const send = () => api.sendMessage(chatId, part, { parse_mode: 'HTML' });
-    if (key) await deliverOnce(`${key}:part:${index}`, send);
-    else await send();
+    if (key) {
+      const partKey = `${key}:part:${index}`;
+      if (!(await deliverOnce(partKey, send))) {
+        const delivery = await JobLog.findOne({ key: partKey }).lean();
+        // Another worker may still be sending this part. Only completed (or
+        // legacy completed) records allow the report's data to be released.
+        if (!delivery || (delivery.state && delivery.state !== 'done')) return false;
+      }
+    } else await send();
   }
+  return true;
 }
 
 module.exports = { deliverOnce, messageChunks, sendReport };

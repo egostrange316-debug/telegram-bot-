@@ -74,10 +74,13 @@ async function postReport(api, group, date = dateKey(), key) {
       }
     } else snapshot = built;
   }
-  await sendReport(api, group.chat_id, snapshot.text, key);
+  if (!(await sendReport(api, group.chat_id, snapshot.text, key))) return;
   // Results arriving after the snapshot or after today's send remain queued for the next report.
+  // Release the downloadable image reference only after every report part was
+  // delivered. Scores, analysis and non-downloadable duplicate fingerprints stay.
   if (snapshot.result_ids.length) await ScreenshotResult.updateMany({ _id: { $in: snapshot.result_ids } }, {
     $addToSet: { report_chats: group.chat_id },
+    $unset: { file_id: 1 },
   });
 }
 

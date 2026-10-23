@@ -2,7 +2,7 @@
 
 - ZIPdagi dastlabki fayllar repo bilan to‘liq solishtirildi: farq yo‘q edi.
 - `npm run check`: JavaScript sintaksis tekshiruvi o‘tdi.
-- `npm run test:unit`: 55/55 tekshiruv o‘tdi (oldingi 45 ta + 10 ta Supabase webhook/adapter testi).
+- `npm run test:unit`: 59/59 tekshiruv o‘tdi (45 ta bot, 10 ta Supabase webhook/adapter, 4 ta hisobot yuborish testi).
 - React komponenti JSX parserdan o‘tdi; Mini App DOM sinovida SVG chizish, IELTS/CEFR almashtirish, HTML escaping, URLdan tokenni olish va 401 xabari tekshirildi. Skrinshotning alohida grafigi/tarixi, nol ball va rasm nomidagi HTML escaping ham tekshirildi. Bu piksel/render skrinshot tekshiruvi emas.
 - `tests/workflows.test.js`: haqiqiy MongoDB bilan ishlaydigan 22 jarayon testi bor (16 asosiy, 3 skrinshot, 3 mustaqil bot/material jarayoni).
 - Ushbu ish muhitida MongoDB binari `open: Operation not permitted` sabab ishga tushmadi;
@@ -41,10 +41,14 @@ MongoDB chaqiruvlari soxta javoblar bilan berilgan; ular haqiqiy indeks/saqlash 
 - Jonli Postgres’da `tests/postgres.integration.sql` PASS: array/NULL/range filtrlari,
   membership, to‘lov takrorlanmasligi, unique Telegram ID, bir vaqtning o‘zida bitta tahlil,
   lease, Telegram update deduplikatsiyasi, service_role Vault kirishi. Fixturelar rollback qilindi.
-- `npm run test:postgres`: alohida PGlite bazasida 12 oqim tekshiruvi PASS: guruh ochish,
+- `npm run test:postgres`: alohida PGlite bazasida 17 oqim tekshiruvi PASS: guruh ochish,
   ro‘yxatdan o‘tish va session saqlanishi, admin HTML/audio yuklashi, material konteksti,
   skrinshot tasdig‘i va majburiy tahlil, hisobotga natija qo‘shish va takror yubormaslik,
   to‘lov, shaxsiy tarix. Bunda Telegram va Gemini chaqiruvlari mock, Postgres haqiqiy SQL.
+- Skrinshot havolasi hisobot muvaffaqiyatli yuborilgach o‘chadi; xato yoki faol yuborish
+  paytida saqlanadi. Natijalar tarixi, takror skrinshotni aniqlash va majburiy tahlil
+  saqlanishi SQL oqimida tekshirildi. Ko‘p qismli hisobot xatosidan keyingi qayta urinish
+  hamda eski/yakunlangan yuborishlar unit testlarda tekshirildi.
 - Jonli funksiya: `/health` 200; ruxsatsiz `/webhook` 401; maxfiy sarlavhali sinov update 200;
   navbat yozuvi `done`, urinishlar 1. Sinov update xabarsiz edi va hech kimga xabar yubormadi.
 - Telegram `setWebhook` ulandi: Supabase webhook URL, `max_connections=1`, pending updates 0, oxirgi xato yo‘q.
