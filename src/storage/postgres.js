@@ -4,7 +4,7 @@
 const { randomBytes } = require('crypto');
 let rpc;
 function configureDatabase(call) { rpc = call; }
-const dates = new Set(['createdAt', 'updatedAt', 'subscription_end_date', 'expires_at', 'submitted_at', 'accepted_at', 'draft_until', 'analyzed_at', 'finished_at', 'completed_at', 'lease_until', 'paid_at', 'paid_through']);
+const dates = new Set(['createdAt', 'updatedAt', 'subscription_end_date', 'expires_at', 'submitted_at', 'accepted_at', 'draft_until', 'analyzed_at', 'finished_at', 'completed_at', 'lease_until', 'paid_at', 'paid_through', 'starts_at', 'ends_at', 'closed_at']);
 function revive(value, key) {
   if (value == null) return value;
   if (dates.has(key) && typeof value === 'string') return new Date(value);
@@ -94,4 +94,9 @@ model('BotSession', 'bot_sessions', {}, false);
 model('LinkCode', 'bot_link_codes', {}, false);
 model('ScreenshotResult', 'bot_screenshot_results', { needs_analysis: false, read_count: 1, report_chats: [] });
 model('AttendanceReport', 'bot_attendance_reports', { result_ids: [] }, false);
-module.exports = { ...models, configureDatabase, revive, project };
+model('BioProfile', 'bio_profiles', { group_ids: [], mode: 'student' });
+model('BioGroup', 'bio_groups', { enabled: true, weekly_enabled: false, weekday: 0, time: '20:00', duration: 90 });
+model('BioMock', 'bio_mocks', { status: 'draft', materials: [], roster: [] });
+model('BioSubmission', 'bio_submissions');
+const submitBiology = args => rpc('bio_submit', args);
+module.exports = { ...models, configureDatabase, revive, project, submitBiology };

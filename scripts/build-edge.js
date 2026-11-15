@@ -2,14 +2,15 @@ const esbuild = require('esbuild');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const testing = process.argv.includes('--test');
+const biology = process.argv.includes('--biology');
 const aliases = {
   [path.join(root, 'src/config.js')]: path.join(root, 'src/edge/config.js'),
   [path.join(root, 'src/models/app.js')]: path.join(root, 'src/storage/postgres.js'),
   [path.join(root, 'src/models/bot.js')]: path.join(root, 'src/storage/postgres.js'),
 };
 esbuild.build({
-  entryPoints: [testing ? 'tests/supabase-flow.entry.js' : 'src/edge/runtime.js'],
-  outfile: testing ? 'tests/.generated-flow.cjs' : 'supabase/functions/enzo-bot/runtime.mjs',
+  entryPoints: [testing ? biology ? 'tests/biology-flow.entry.js' : 'tests/supabase-flow.entry.js' : 'src/edge/runtime.js'],
+  outfile: testing ? biology ? 'tests/.generated-biology.cjs' : 'tests/.generated-flow.cjs' : 'supabase/functions/enzo-bot/runtime.mjs',
   external: testing ? ['grammy', 'bcryptjs', 'node:*'] : ['npm:*', 'node:*'], bundle: true, platform: testing ? 'node' : 'neutral', format: testing ? 'cjs' : 'esm', target: 'es2022',
   banner: testing ? {} : { js: 'import { Buffer } from "node:buffer";' },
   plugins: [{ name: 'edge-adapters', setup(build) {

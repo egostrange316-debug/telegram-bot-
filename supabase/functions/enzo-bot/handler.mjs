@@ -76,7 +76,7 @@ export function createHandler({ runtime, rpc, waitUntil, clock = Date.now, logge
   const background = fn => waitUntil(fn().catch(error => logger.error('ENZO background failed', error?.code || 'runtime')));
   return async req => {
     const path = new URL(req.url).pathname;
-    if (req.method === 'GET' && path.endsWith('/health')) return json({ ok: true, service: 'enzo-material-bot' });
+    if (req.method === 'GET' && path.endsWith('/health')) return json({ ok: true, service: 'biology-mock-bot' });
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
     try {
       await initialize();

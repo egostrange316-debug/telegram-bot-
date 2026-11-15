@@ -1,3 +1,29 @@
+# Biologiya botiga o‘tish — 2026-11-15
+
+- `npm run test:unit`: 65 test PASS.
+- `npm run test:biology`: PGlite’da production SQL bilan 27 biologiya tekshiruvi PASS;
+  Telegram va Gemini javoblari testda soxta, jonli guruhga hech narsa yuborilmagan.
+- Sinovlar: faqat ega adminligi; rejim almashtirish; guruh a’zoligi; fayl/kalit/haftalik navbat;
+  yuborish xatosidan tiklanish; suratdan javoblarni tasdiqlash; guruhlarni ajratish;
+  birovning tasdig‘ini rad etish; muddatgacha bahoni yashirish; qayta topshirishni bitta
+  natijada saqlash; bir vaqtdagi topshirish; bazada kechikkan javobni rad etish;
+  kalit/natija/topshirmaganlar/haftalik reyting; navbatda 50 talik yo‘q bo‘lsa ogohlantirish;
+  `anon` rolining baholash RPC’siga kira olmasligi.
+- `npm run test:postgres`: avvalgi 17 oqim yangi bazaviy migratsiya bilan regressiya tekshiruvi.
+- `npm run check`: sintaksis tekshiruvi.
+- Supabase `enzo-bot` v3 ACTIVE; `/health` 200 (`biology-mock-bot`), ruxsatsiz webhook 401,
+  cron 202. Telegram webhook joyida, pending 0, oxirgi xato yo‘q.
+- Telegram nomi `Biologiya Mock`, buyruqlar yangi menyuga moslashtirildi.
+- Vault’da faqat ega IDsi qoldi. Eski botdan 5 o‘quvchi, 3 ulanish va ularning 9 davomat
+  yozuvi olib tashlandi. Telegram guruhidan a’zolar chiqarilmadi. Biologiya guruhi hali ulanmagan.
+- Yangi baholash RPC’si service_role uchun ochiq, anon/authenticated uchun yopiq; RLS saqlangan.
+  Oldingi [pg_net ogohlantirishi](https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public)
+  saqlanmoqda. Shu loyihadagi alohida o‘yin funksiyasi/jadvallari o‘zgartirilmadi.
+- Haqiqiy biologiya guruhi, foydalanuvchi yuklagan 50 savollik mock va haqiqiy javob varaqasi
+  bilan qabul sinovi hali kerak. Ular suhbatda berilmagan; guruh `/ulash` bilan ulanadi.
+
+---
+
 # Tekshiruv holati — 2026-10-23
 
 - ZIPdagi dastlabki fayllar repo bilan to‘liq solishtirildi: farq yo‘q edi.

@@ -10,7 +10,8 @@
     "check": "node scripts/check.js",
     "build:edge": "node scripts/build-edge.js",
     "test:edge": "node --test tests/edge.unit.test.js",
-    "test:postgres": "node scripts/build-edge.js --test && node scripts/test-postgres.js"
+    "test:postgres": "node scripts/build-edge.js --test && node scripts/test-postgres.js",
+    "test:biology": "node scripts/build-edge.js --test --biology && node scripts/test-postgres.js --biology"
   },
   "repository": {
     "type": "git",

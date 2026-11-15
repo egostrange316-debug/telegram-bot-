@@ -1,3 +1,8 @@
+> **2026-11-15:** jonli Edge runtime biologiya mock botiga o‘tdi. Yangi bazada
+> `schema.sql`dan so‘ng `20261115072715_biology_mock.sql`ni ham qo‘llang.
+> Foydalanish tartibi va yangi menyular [README](../README.md)da.
+> `enzo_ADMIN_IDS`da faqat bot egasining IDsi qoladi. Boshqa loyiha/funksiyalarga tegmang.
+
 # ENZO — Supabase Free
 
 ## Ishlaydigan arxitektura
