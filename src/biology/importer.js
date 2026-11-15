@@ -86,7 +86,7 @@ function zipPath(name) {
   const directory = name.endsWith('/'), parts = (directory ? name.slice(0,-1) : name).split('/');
   if (parts.some(p => !p || p === '.' || p === '..')) fail('ZIP: xavfli fayl yo‘li.');
   const base = parts.at(-1);
-  if (!directory && !/^(?:mock\.json|answers\.json|.+_(?:mock|answers)\.json|[^.].*\.html|README(?:\.(?:txt|md))?)$/i.test(base)) fail(`ZIP: qo‘llanmaydigan fayl: ${name.slice(0,80)}`);
+  if (!directory && !/^(?:(?:mock|public|answers)\.json|.+_(?:mock|public|answers)\.json|[^.].*\.html|README(?:\.(?:txt|md))?|BOT_INTEGRATSIYA\.txt)$/i.test(base)) fail(`ZIP: qo‘llanmaydigan fayl: ${name.slice(0,80)}`);
   return directory;
 }
 function unzip(bytes) {
@@ -164,10 +164,10 @@ function packagesFromZip(files) {
   const mocks=[], keys=[];
   for (const [name,text] of Object.entries(files)) {
     const base=name.split('/').at(-1);
-    if (/^(?:mock|.+_mock)\.json$/i.test(base)) mocks.push({name,data:parseJSON(text,name)});
+    if (/^(?:mock|public|.+_(?:mock|public))\.json$/i.test(base)) mocks.push({name,data:parseJSON(text,name)});
     else if (/^(?:answers|.+_answers)\.json$/i.test(base)) keys.push({name,data:parseJSON(text,name)});
   }
-  if (!mocks.length || !keys.length) fail('ZIPda mock.json + answers.json yoki NOM_mock.json + NOM_answers.json kerak. HTMLning o‘zi yetmaydi.');
+  if (!mocks.length || !keys.length) fail('ZIPda mock.json + answers.json yoki NOM_public.json + NOM_SERVER_ONLY_answers.json kerak. NOM_mock.json + NOM_answers.json ham mumkin. HTMLning o‘zi yetmaydi.');
   if (mocks.length > MAX_MOCKS) fail(`Bitta ZIPda eng ko‘pi ${MAX_MOCKS} ta MOCK mumkin.`);
   const used=new Set(), identities=new Set();
   const packages=mocks.map(({name,data:mock})=>{

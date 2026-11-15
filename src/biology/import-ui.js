@@ -31,7 +31,7 @@ async function choosePackage(ctx,packages,editId) {
   return ctx.reply(`ZIPda ${packages.length} ta MOCK qoldi. Qaysi birini qoralamaga saqlaymiz? Barchasining savollari va kalitlari tekshirildi.`,{reply_markup:kb});
 }
 function registerImportUI(bot,{admin,showGroups,menu,download=downloadImport}) {
-  bot.hears(C.upload,async ctx=>{await admin(ctx);setSession(ctx.from.id,{step:'import_file',data:{}});return ctx.reply('ZIP: mock.json + answers.json yoki NOM_mock.json + NOM_answers.json. Bitta ZIPda bir nechta MOCK bo‘lishi mumkin — tanlash tugmalari chiqadi.\nYoki bitta JSON: {"mock": {...}, "answer_key": {...}}.\n2 MB gacha; har bir MOCK 30 yoki 50 savol. /cancel — bekor qilish.');});
+  bot.hears(C.upload,async ctx=>{await admin(ctx);setSession(ctx.from.id,{step:'import_file',data:{}});return ctx.reply('ZIP: mock.json + answers.json, NOM_mock.json + NOM_answers.json yoki NOM_public.json + NOM_SERVER_ONLY_answers.json. HTML va BOT_INTEGRATSIYA.txt ixtiyoriy. Bitta ZIPda bir nechta MOCK bo‘lishi mumkin — tanlash tugmalari chiqadi.\nYoki bitta JSON: {"mock": {...}, "answer_key": {...}}.\n2 MB gacha; har bir MOCK 30 yoki 50 savol. /cancel — bekor qilish.');});
   bot.callbackQuery(/^ci:([a-f\d]{8}):(\d)$/,async ctx=>{
     await admin(ctx);const s=getSession(ctx.from.id),i=Number(ctx.match[2]);
     if(s?.step!=='import_pick'||s.data.token!==ctx.match[1]||!s.data.packages[i])throw new InputError('Bu ZIP tanlovi eskirgan. Faylni qayta yuboring.');

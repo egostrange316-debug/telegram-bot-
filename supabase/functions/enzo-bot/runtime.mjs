@@ -3312,7 +3312,7 @@ var require_importer = __commonJS({
       const directory = name.endsWith("/"), parts = (directory ? name.slice(0, -1) : name).split("/");
       if (parts.some((p) => !p || p === "." || p === "..")) fail("ZIP: xavfli fayl yo\u2018li.");
       const base = parts.at(-1);
-      if (!directory && !/^(?:mock\.json|answers\.json|.+_(?:mock|answers)\.json|[^.].*\.html|README(?:\.(?:txt|md))?)$/i.test(base)) fail(`ZIP: qo\u2018llanmaydigan fayl: ${name.slice(0, 80)}`);
+      if (!directory && !/^(?:(?:mock|public|answers)\.json|.+_(?:mock|public|answers)\.json|[^.].*\.html|README(?:\.(?:txt|md))?|BOT_INTEGRATSIYA\.txt)$/i.test(base)) fail(`ZIP: qo\u2018llanmaydigan fayl: ${name.slice(0, 80)}`);
       return directory;
     }
     function unzip(bytes) {
@@ -3412,10 +3412,10 @@ var require_importer = __commonJS({
       const mocks = [], keys = [];
       for (const [name, text] of Object.entries(files)) {
         const base = name.split("/").at(-1);
-        if (/^(?:mock|.+_mock)\.json$/i.test(base)) mocks.push({ name, data: parseJSON(text, name) });
+        if (/^(?:mock|public|.+_(?:mock|public))\.json$/i.test(base)) mocks.push({ name, data: parseJSON(text, name) });
         else if (/^(?:answers|.+_answers)\.json$/i.test(base)) keys.push({ name, data: parseJSON(text, name) });
       }
-      if (!mocks.length || !keys.length) fail("ZIPda mock.json + answers.json yoki NOM_mock.json + NOM_answers.json kerak. HTMLning o\u2018zi yetmaydi.");
+      if (!mocks.length || !keys.length) fail("ZIPda mock.json + answers.json yoki NOM_public.json + NOM_SERVER_ONLY_answers.json kerak. NOM_mock.json + NOM_answers.json ham mumkin. HTMLning o\u2018zi yetmaydi.");
       if (mocks.length > MAX_MOCKS) fail(`Bitta ZIPda eng ko\u2018pi ${MAX_MOCKS} ta MOCK mumkin.`);
       const used = /* @__PURE__ */ new Set(), identities = /* @__PURE__ */ new Set();
       const packages = mocks.map(({ name, data: mock }) => {
@@ -3660,7 +3660,7 @@ Savollar va kalitni ko\u2018rib, tasdiqlang. HTML xavfsiz test oynasida avtomati
       bot.hears(C.upload, async (ctx) => {
         await admin(ctx);
         setSession(ctx.from.id, { step: "import_file", data: {} });
-        return ctx.reply('ZIP: mock.json + answers.json yoki NOM_mock.json + NOM_answers.json. Bitta ZIPda bir nechta MOCK bo\u2018lishi mumkin \u2014 tanlash tugmalari chiqadi.\nYoki bitta JSON: {"mock": {...}, "answer_key": {...}}.\n2 MB gacha; har bir MOCK 30 yoki 50 savol. /cancel \u2014 bekor qilish.');
+        return ctx.reply('ZIP: mock.json + answers.json, NOM_mock.json + NOM_answers.json yoki NOM_public.json + NOM_SERVER_ONLY_answers.json. HTML va BOT_INTEGRATSIYA.txt ixtiyoriy. Bitta ZIPda bir nechta MOCK bo\u2018lishi mumkin \u2014 tanlash tugmalari chiqadi.\nYoki bitta JSON: {"mock": {...}, "answer_key": {...}}.\n2 MB gacha; har bir MOCK 30 yoki 50 savol. /cancel \u2014 bekor qilish.');
       });
       bot.callbackQuery(/^ci:([a-f\d]{8}):(\d)$/, async (ctx) => {
         await admin(ctx);

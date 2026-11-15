@@ -13,6 +13,7 @@ module.exports = async function run(rpc, db) {
   const ok=(value,label)=>{ assert.ok(value,label); checks.push(label); };
   const key=Array.from({length:50},(_,i)=>'ABCD'[i%4]);
   const bot=createBot({downloadImport:async(_api,document)=>{
+    if(document.file_id==='fixture-public-bundle')return require('../src/biology/importer').importFile(require('./public-import-flow').archive(),document.file_name);
     const one=require('../src/biology/importer').validatePackage(require('../examples/mock-30/import.json').mock,require('../examples/mock-30/import.json').answer_key);
     return document.file_id==='fixture-import-bundle' ? {packages:[{...one,mock_id:'BIO7-BATCH-A'},{...one,mock_id:'BIO7-BATCH-B'}]} : one;
   },readSheet:async()=>{reads++;return [...key];}});
@@ -94,6 +95,7 @@ module.exports = async function run(rpc, db) {
     ok(await Submission.countDocuments({mock_id:race._id,telegram_id:student})===1,'concurrent submissions keep exactly one participant result');
     await db.exec('set role anon');await assert.rejects(db.query('select public.bio_submit($1,$2,$3::jsonb,$4)',[mid,student,JSON.stringify(key),'a'.repeat(24)]),/permission denied/);await db.exec('reset role');checks.push('anonymous clients cannot call the scoring RPC');
     await require('./import-flow')({msg,cb,owner,student,outsider,g,bot,checks,db,calls});
+    await require('./public-import-flow').run({msg,cb,owner,student,g,bot,checks});
     await require('./join-flow')({msg,cb,outsider,bot,checks,calls});
     await require('./review-flow')({msg,cb,bot,checks,calls});
     await require('./schedule-flow')(checks);

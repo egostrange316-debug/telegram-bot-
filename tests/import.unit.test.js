@@ -59,3 +59,25 @@ test('folder support still rejects traversal, absolute/Windows paths, duplicate 
  assert.throws(()=>importFile(zipSync({...base,'MOCK.JSON':base['mock.json']}),'x.zip'),/takrorlangan/);
  const dirs=Object.fromEntries(Array.from({length:39},(_,i)=>[`folder${i}/`,new Uint8Array()]));assert.throws(()=>importFile(zipSync({...base,...dirs}),'x.zip'),/eng ko‘pi 40/);
 });
+
+test('public/server-only export accepts both MOCKs and ignores HTML/integration notes',()=>{
+ const a=legacy('BIO7-50-59-M3'),b=legacy('BIO7-50-59-M4');
+ const files={'BOT_INTEGRATSIYA.txt':strToU8('API sample; never execute this note')};
+ for(const [n,d] of [[3,a],[4,b]]){
+  files[`MOCK_0${n}_public.json`]=strToU8(JSON.stringify(d.mock));
+  files[`MOCK_0${n}_SERVER_ONLY_answers.json`]=strToU8(JSON.stringify(d.key));
+  files[`BIO7_MOCK_0${n}_BOT.html`]=strToU8('<script>const answer_key="PRIVATE_HTML_MARKER"</script>');
+ }
+ const data=importFile(zipSync(files),'BIO_MOCK_3_4_QAYTA_YUKLASH.zip');
+ assert.deepEqual(data.packages.map(p=>p.mock_id),['BIO7-50-59-M3','BIO7-50-59-M4']);
+ for(const p of data.packages){assert.equal(p.questions.length,30);assert.deepEqual(p.answer_key,Array(30).fill('B'));assert.ok(!JSON.stringify(p).includes('PRIVATE_HTML_MARKER'));assert.ok(!JSON.stringify(p).includes('API sample'));}
+});
+test('public filename alias keeps strict validation, pair identity and path checks',()=>{
+ const d=legacy('BIO7-50-59-M3');
+ const files={'MOCK_03_public.json':strToU8(JSON.stringify(d.mock)),'MOCK_03_SERVER_ONLY_answers.json':strToU8(JSON.stringify(d.key))};
+ assert.throws(()=>importFile(zipSync({...files,'duplicate_mock.json':files['MOCK_03_public.json']}),'x.zip'),/takrorlangan/);
+ assert.throws(()=>importFile(zipSync({'MOCK_03_public.json':files['MOCK_03_public.json']}),'x.zip'),/kalit|answers/);
+ for(const name of ['../MOCK_04_public.json','note.txt','BOT_INTEGRATSIYA.txt.js'])assert.throws(()=>importFile(zipSync({...files,[name]:strToU8('x')}),'x.zip'));
+ delete d.key.answers.Q010;
+ assert.throws(()=>importFile(zipSync({...files,'MOCK_03_SERVER_ONLY_answers.json':strToU8(JSON.stringify(d.key))}),'x.zip'),/MOCK_03_public.json: Q010/);
+});

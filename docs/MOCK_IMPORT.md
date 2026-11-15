@@ -44,12 +44,20 @@ Bitta MOCK uchun quyidagi fayllar bo‘lsin. Ular arxiv ildizida yoki oddiy papk
 - `answers.json` — majburiy: server uchun javoblar kaliti.
 - `index.html` — ixtiyoriy: importda bajarilmaydi va o‘quvchiga tarqatilmaydi.
 
-Bir ZIPda 10 tagacha MOCK mumkin. `NOM_mock.json` + `NOM_answers.json` nomlari ham taniladi; har bir testning HTML fayli ixtiyoriy. Savol va kalit fayllari nomiga emas, `mock_id` va `version`ga qarab bog‘lanadi. `README`, `README.txt` yoki `README.md` bo‘lsa e’tiborga olinmaydi. Ichki ZIP, bajariladigan kod fayllari, symlink va xavfli yo‘llar qabul qilinmaydi.
+Bir ZIPda 10 tagacha MOCK mumkin. `NOM_mock.json` + `NOM_answers.json` hamda `NOM_public.json` + `NOM_SERVER_ONLY_answers.json` nomlari ham taniladi; har bir testning HTML fayli ixtiyoriy. Savol va kalit fayllari nomiga emas, `mock_id` va `version`ga qarab bog‘lanadi. `README`, `README.txt`, `README.md` yoki `BOT_INTEGRATSIYA.txt` bo‘lsa e’tiborga olinmaydi; undagi ko‘rsatmalar bajarilmaydi. Ichki ZIP, bajariladigan kod fayllari, symlink va xavfli yo‘llar qabul qilinmaydi.
 
 Masalan, oldingi ChatGPT arxivi shu holicha yuklanadi:
 
 - `BIO7_MOCK_01_mock.json`, `BIO7_MOCK_01_answers.json`, `BIO7_MOCK_01.html`
 - `BIO7_MOCK_02_mock.json`, `BIO7_MOCK_02_answers.json`, `BIO7_MOCK_02.html`
+
+№3/№4 yangi eksporti ham shu holicha qabul qilinadi:
+
+- `MOCK_03_public.json`, `MOCK_03_SERVER_ONLY_answers.json`, `BIO7_MOCK_03_BOT.html`
+- `MOCK_04_public.json`, `MOCK_04_SERVER_ONLY_answers.json`, `BIO7_MOCK_04_BOT.html`
+- `BOT_INTEGRATSIYA.txt` — ixtiyoriy izoh.
+
+Savollar va kalitlar mavjud xavfsiz Mini Appga ulanadi. Yuklangan HTMLning begona API manzillari yoki URLdagi `session` namunasi ishlatilmaydi: bot o‘z Telegram imzo tekshiruvi, ichki `run_id` va server muddatidan foydalanadi. №3/№4 HTMLidagi savollar JSONdagi savollar bilan bir xil; ularning javob belgilash, topshirish va muddatdan keyingi tahlili botning test oynasida ishlaydi. HTML ichidagi kalit yoki skriptlar server bazasiga va o‘quvchiga ko‘chirilmaydi.
 
 Bot avval barcha savol va kalitlarni tekshiradi, so‘ng **qaysi MOCKni saqlash** tugmalarini chiqaradi. Hech biri avtomatik tasdiqlanmaydi. Birinchi MOCK saqlangach ikkinchisini ham tanlang. Import tugmasini qayta bosish yoki `/cancel` qolgan tanlovni bekor qiladi; saqlangan qoralama o‘chmaydi.
 

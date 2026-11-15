@@ -1,3 +1,16 @@
+# №3/№4 public/server-only ZIP integratsiyasi — 2026-11-15
+
+- Asl `BIO_MOCK_3_4_QAYTA_YUKLASH.zip` (SHA-256 `d68f1cb4287b3c9f396c98f5da4ab518370dd576289ad444c3298250bfba4eaf`) tekshirildi: 7 fayl, 2 × 30 savol. Har ikkala HTML savollari tegishli public JSON bilan aynan bir xil. Kalitlar har bir savol IDsi uchun bor va A/B/C/Dga mos; biologik mazmun/kalitning ilmiy to‘g‘riligi ushbu dasturiy sinovning qismi emas.
+- Importer `NOM_public.json`ni savollar fayli sifatida taniydi; `NOM_SERVER_ONLY_answers.json` avvalgi kalit matcheridan foydalanadi. `BOT_INTEGRATSIYA.txt` xavfsiz izoh sifatida e’tiborga olinmaydi. Yo‘l/hajm/CRC/ID/versiya/kalit tekshiruvlari saqlangan.
+- Yuklangan HTML skriptlari yoki URLdagi sessiya namunasi bajarilmaydi. Testlar Telegram imzosi tekshiriladigan mavjud Mini App orqali ishlaydi; kalitlar public HTML yoki GitHubga kiritilmadi. Frontendni o‘zgartirish talab qilinmadi.
+- Asl ZIP bilan PGlite va haqiqiy migratsiyalar asosida **119 oqim tekshiruvi PASS**: admin ZIP tanlovi → ikkita qoralama → tasdiqlash → HTML/API orqali topshirish → ballsiz kvitansiya → server muddatigacha yopiq natija → muddatdan keyin faqat ko‘rish. Har ikkala mockda soxta telefon vaqti, muddatni almashtirish, kechikkan javobni o‘zgartirish tekshirildi.
+- Repo ichidagi sintetik ZIP bilan ham **119 PASS**; `npm run test:unit`: **80 PASS**. `npm run check`, `npm run build:edge`, `git diff --check`: PASS. Asl ZIPni qayta tekshirish: `BIO_IMPORT_ZIP=/absolute/path/to/private.zip npm run test:biology`. ZIP va haqiqiy kalitlar repo tashqarisida qoladi.
+- Jonli katalogda №3 va №4 v1 allaqachon mavjud edi. Ularning savollari/kalitlari yuklangan fayllar bilan serverda solishtirildi va tengligi tasdiqlandi. №3 tasdiqlangan holicha qoldi. O‘chirilgan №4 faqat qoralamaga tiklandi; biriktirilgan oldingi testlar va natijalar o‘zgartirilmadi. Yangi guruh/vaqt rejalashtirilmadi.
+- Supabase `enzo-bot` **v9 ACTIVE**. Health 200, ruxsatsiz review/webhook 401. Cron faol va muvaffaqiyatli. Bazada RLS saqlangan, `anon`/`authenticated` rollarida kalitlarni o‘qish huquqi yo‘q.
+- Telegram/Gemini so‘rovlari sinovda soxta: guruhga sinov xabari yuborilmadi. Haqiqiy o‘quvchi akkaunti bilan mobil Mini App yakuniy sinovi bajarilmadi.
+
+---
+
 # Natijani muddatgacha yashirish va test tahlili — 2026-11-15
 
 - Bot va Mini App topshirishni darhol tekshiradi/saqlaydi, lekin umumiy `ends_at`gacha faqat qabul kvitansiyasini beradi. Ball, foiz, xato savollar va to‘g‘ri javoblar berilmaydi; takroriy submit ham kalit/ballni oshkor qilmaydi.
