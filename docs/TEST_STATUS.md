@@ -1,3 +1,16 @@
+# Natijani muddatgacha yashirish va test tahlili — 2026-11-15
+
+- Bot va Mini App topshirishni darhol tekshiradi/saqlaydi, lekin umumiy `ends_at`gacha faqat qabul kvitansiyasini beradi. Ball, foiz, xato savollar va to‘g‘ri javoblar berilmaydi; takroriy submit ham kalit/ballni oshkor qilmaydi.
+- Muddatdan keyin **Natijalarim → Tahlil**: faqat o‘z topshirgan javoblari, to‘g‘ri variant, xato/bo‘sh savollar filtri. Eski test havolasi ham tahlilga yo‘naltiradi. Tahlil urinish, javob, natija yoki admin retake ruxsatini o‘zgartirmaydi.
+- `POST /api/review` Telegram sessiyasi va umumiy tugash vaqtini serverda tekshiradi. Begona Telegram ID, topshirmagan akkaunt, vaqtgacha so‘rov va autentifikatsiyasiz kirish rad etiladi. Cron kechiksa ham tugash vaqti yetarli; kalit faol test javobiga kirmaydi.
+- `npm run test:biology`: **104 PASS**; `npm run test:unit`: **78 PASS**; `npm run check`, `npm run build:edge`, `git diff --check`: PASS.
+- `tests/miniapp-review.dom.cjs`: to‘rtta DOM sinov guruhi PASS (faqat ko‘rish, filtr/tarix, XSS matn, muddatgacha yopiq tahlil, ballsiz kvitansiya, Telegramdan tashqarida yopiq kirish). JSDOM mavjud bo‘lsa `node tests/miniapp-review.dom.cjs`; boshqa o‘rnatishdagi modul yo‘li `JSDOM_MODULE` bilan beriladi.
+- Brauzerda alohida sintetik 3 savollik fixture bilan tahlil ranglari, matnlar va xato/bo‘sh filtri tekshirildi. Fixture jonli saytga kiritilmadi. Haqiqiy Telegram akkaunti bilan foydalanuvchi sinovi bajarilmadi, guruhga sun’iy test xabari yuborilmadi.
+- Supabase `enzo-bot` **v8 ACTIVE**, Mini App **2-versiya** joylandi. Yangi baza migratsiyasi kerak emas. `/health` 200; autentifikatsiyasiz `/api/review` va qalbaki `/webhook` 401. Sites 2-versiyasi tekshirilgan manbadan yig‘ilib muvaffaqiyatli chop etildi. Terminaldan statik fayllarni qayta olish HTTP 403 bilan to‘xtadi; jonli fayllarning byte-taqqoslashi tasdiqlanmadi.
+- O‘z HTMLini ulash uchun `/submit` kvitansiyasi, `/list` tarixi va `/review` formati `docs/MOCK_IMPORT.md`da yozildi. Statik HTMLda kalit bo‘lmasligi shart.
+
+---
+
 # Qatnashishdan testga o‘tish — 2026-11-15
 
 - **Qatnashaman** guruh a’zoligini tekshirib, qatnashchini takrorlamasdan yozadi va `/start m_KOD` orqali botga yo‘naltiradi.

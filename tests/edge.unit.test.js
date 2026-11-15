@@ -39,6 +39,12 @@ test('malformed updates never reach queue', async () => {
   assert.equal((await createHandler(f)(request('webhook','hook-secret',{update_id:'1'}))).status,400);
   assert.equal(f.work.length,0);
 });
+test('analysis endpoint routes through the authenticated Mini App API', async () => {
+  const { createHandler } = await import(modulePath); const f = fixture(); let path;
+  f.runtime.handleApi = async req => { path=new URL(req.url).pathname; return new Response('{}',{status:401}); };
+  const response=await createHandler(f)(request('api/review','',{}));
+  assert.equal(path,'/enzo-bot/api/review');assert.equal(response.status,401);assert.equal(f.work.length,0);
+});
 test('worker failure preserves update for retry and releases lease', async () => {
   const { createHandler } = await import(modulePath); const f = fixture(); const base = f.rpc;
   f.rpc = (n,b) => n==='enzo_queue' && b.p_action==='claim' ? Promise.resolve({update_id:9}) : base(n,b);

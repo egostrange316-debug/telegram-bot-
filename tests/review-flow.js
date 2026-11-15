@@ -1,0 +1,63 @@
+const assert = require('node:assert/strict');
+const config = require('../src/config');
+const { BioMock:Mock, BioGroup:Group, BioProfile:Profile, BioSubmission:Submission, BioAttempt:Attempt } = require('../src/storage/postgres');
+const { handleApi } = require('../src/biology/api');
+const { issueSession } = require('../src/biology/auth');
+const { snapshot } = require('../src/biology/catalog');
+const { validatePackage } = require('../src/biology/importer');
+const service = require('../src/biology/service');
+
+module.exports = async function reviewFlow({ msg, cb, bot, calls, checks }) {
+  const ok = (value,label) => { assert.ok(value,label); checks.push(label); };
+  const user = 991000030, other = 991000031;
+  config.MINIAPP_URL = 'https://biology.example';
+  const group = await Group.create({chat_id:-100991000030,title:'Review fixture'});
+  const person = id => ({id,first_name:'Review student'});
+  await service.enroll(bot.api,person(user),group);await service.enroll(bot.api,person(other),group);
+  const sample = require('../examples/mock-30/import.json');
+  const data = snapshot({...validatePackage(sample.mock,sample.answer_key),status:'approved',_id:'d'.repeat(24)});
+  let m = await Mock.create({...data,group_id:group._id,code:'d00101',status:'open',starts_at:new Date(Date.now()-1000),ends_at:new Date(Date.now()+3600_000)});
+  const answers=[...m.answer_key];answers[0]=m.answer_key[0]==='A'?'B':'A';answers[1]='-';
+  await service.accept(m,person(user),answers);
+  await service.accept(m,person(other),m.answer_key);
+  const request=async(id,action,body={},withToken=true)=>{
+    const r=await handleApi(new Request(`https://backend.example/api/${action}`,{method:'POST',headers:{origin:'https://biology.example','content-type':'application/json',...(withToken?{authorization:`Bearer ${issueSession(person(id),config.BOT_TOKEN)}`}:{})},body:JSON.stringify(body)}),{api:bot.api});
+    return {status:r.status,headers:r.headers,data:await r.json()};
+  };
+  let r=await request(user,'review',{run_id:m._id});
+  ok(r.status===400&&!JSON.stringify(r.data).includes('correct_answer'),'submitted student cannot see correct answers before the group deadline');
+  const history=(await request(user,'list')).data.history;
+  ok(history.length===1&&!history[0].review_ready&&!JSON.stringify(history).includes('answers')&&!('correct' in history[0])&&!('percent' in history[0]),'history withholds scores and answers until the shared deadline');
+  await Mock.updateOne({_id:m._id},{$set:{ends_at:new Date(Date.now()-1000)}});m=await Mock.findById(m._id);
+  const before=JSON.stringify({mock:await Mock.findById(m._id),attempts:await Attempt.find({mock_id:m._id}),submissions:await Submission.find({mock_id:m._id})});
+  r=await request(user,'review',{run_id:m._id,telegram_id:other,answers:m.answer_key});
+  ok(r.status===200&&r.data.result.correct===28&&r.data.questions[0].selected_answer===answers[0]&&r.data.questions[0].correct_answer===m.answer_key[0]&&
+    !r.data.questions[0].is_correct&&r.data.questions[1].selected_answer==='-'&&r.data.questions[2].is_correct,'review compares the signed-in student’s saved wrong, blank and correct answers after deadline');
+  ok(r.headers.get('cache-control')==='no-store'&&!JSON.stringify(r.data).includes('nonce')&&!JSON.stringify(r.data).includes('telegram_id'),'review response is not cacheable and contains no attempt token or other student identity');
+  await request(user,'review',{run_id:m._id});
+  const after=JSON.stringify({mock:await Mock.findById(m._id),attempts:await Attempt.find({mock_id:m._id}),submissions:await Submission.find({mock_id:m._id})});
+  ok(before===after,'repeated analysis reads cannot edit scores, answers, attempts or retake permissions');
+  ok((await request(user,'start',{run_id:m._id})).status===400,'analysis access does not reopen the expired test');
+  const saved=await Submission.findOne({mock_id:m._id,telegram_id:user});
+  ok((await request(user,'submit',{run_id:m._id,mock_id:m.external_mock_id,version:m.version,nonce:saved.attempt_nonce,answers:Object.fromEntries(m.questions.map((q,i)=>[q.question_id,m.answer_key[i]]))})).status===400,
+    'submission remains rejected after analysis even with a previous valid attempt nonce');
+  ok((await request(991000032,'review',{run_id:m._id,telegram_id:user})).status===400,'a user without a submission cannot request another student’s analysis');
+  ok((await request(user,'review',{run_id:m._id},false)).status===401,'review requires authenticated Telegram identity');
+  ok((await request(user,'review',{run_id:'invalid'})).status===400,'review rejects invalid mock identifiers');
+  const past=(await request(user,'list')).data.history;
+  ok(past.length===1&&past[0].review_ready&&past[0].correct===28,'history exposes completed personal analysis even before cron changes open to closed');
+  let start=calls.length;await msg(user,'/natijalar');
+  const button=calls.slice(start).flatMap(c=>c.payload.reply_markup?.inline_keyboard?.flat()||[]).find(b=>b.web_app);
+  ok(button&&new URL(button.web_app.url).searchParams.get('mode')==='review'&&new URL(button.web_app.url).searchParams.get('run')===m._id,'personal results link to the read-only Mini App for the exact mock');
+  start=calls.length;await msg(user,`/start m_${m.code}`);
+  ok(calls.slice(start).some(c=>c.payload.reply_markup?.inline_keyboard?.flat().some(b=>b.web_app?.url.includes('mode=review'))),'reopening an old completed test link shows analysis instead of starting an attempt');
+  start=calls.length;await cb(user,`br:${m.code}`);
+  ok(calls.slice(start).some(c=>c.payload.text?.includes('test tahlili')),'bot analysis callback uses the same authenticated personal review');
+  await Group.updateOne({_id:group._id},{$set:{enabled:false}});
+  await Profile.updateOne({telegram_id:user},{$set:{group_ids:[]}});
+  ok((await request(user,'review',{run_id:m._id})).status===200,'a participant retains read-only access to their accepted result after group unlinking');
+  const file=await Mock.create({group_id:group._id,code:'d00102',title:'Old PDF',status:'closed',count:2,answer_key:['A','C'],ends_at:new Date(Date.now()-1000)});
+  await Submission.create({mock_id:file._id,telegram_id:user,answers:['A','B'],correct:1,total:2,percent:50,blank:0});
+  r=await request(user,'review',{run_id:file._id});
+  ok(r.status===200&&r.data.questions.length===2&&r.data.questions[1].correct_answer==='C'&&r.data.questions[1].options===null,'older file mocks show saved answer comparisons without inventing question text');
+};

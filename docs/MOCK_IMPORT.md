@@ -111,11 +111,23 @@ Bu sxema ko‘rsatmasi. Botga tayyor, to‘liq namuna: `examples/mock-30/import.
 
 Guruhdagi havola → bot → mock → **🧩 Botda ishlash** yoki **🌐 Test oynasini ochish**. Telegram ichida A/B/C/D tugmalari; Mini Appda savol raqamlari, taymer, javobni o‘zgartirish/tozalash va yakuniy tasdiq bor. Matn yoki javob varaqasi rasmi bilan topshirish ham saqlangan.
 
-Natija: to‘g‘ri/umumiy, xato va foiz. Guruh leaderboardi va topshirmaganlar muddati tugagach chiqadi. Javob kaliti faqat admin panelida. Birinchi topshirishdan so‘ng o‘quvchi mustaqil ravishda natijani almashtira olmaydi.
+Topshirgach faqat **Javoblaringiz saqlandi** xabari va natija ochiladigan vaqt chiqadi. To‘g‘ri/umumiy, xato, foiz va to‘g‘ri javoblar MOCKning **umumiy tugash vaqtigacha** berilmaydi. Muddat tugagach **Natijalarim → 🔍 Tahlil** yoki Mini Appdagi **Natijalar va tahlil** orqali o‘z topshirgan javoblaringizni qayta ko‘rasiz. To‘g‘ri variant yashil, xato tanlov qizil; xato/bo‘sh savollar filtri bor. Tahlil faqat ko‘rish uchun: yangi urinish ochmaydi, javob yoki ballni o‘zgartirmaydi. Guruh leaderboardi va topshirmaganlar ham muddat tugagach chiqadi.
 
 Mini Appni oddiy brauzerda ochish foydalanuvchini tizimga kiritmaydi. Botdagi `web_app` tugmasidan ochish kerak. O‘quvchi IDsi va balli frontenddan qabul qilinmaydi: server Telegram HMAC imzosini tekshiradi, server sessiyasi beradi, guruh a’zoligini qayta tekshiradi va SQL ichida vaqt/urinishni tekshiradi.
 
 `index.html` ichida kalit yoki begona JavaScript bo‘lishi mumkin. Shu sabab import savollar asosida umumiy ishonchli `miniapp/` oynasini tuzadi; original HTML dizayni yoki uning skriptlari bajarilmaydi. Savol matni HTML sifatida emas, oddiy matn sifatida chiqariladi. Import ZIP/JSON va kalit fayllarini o‘quvchi guruhiga yubormang.
+
+## O‘z HTML oynangizni moslash
+
+Javob kalitini HTML/JavaScript yoki ochiq JSONga **kiritmang**; CSS bilan yashirish himoya emas. `answers.json` faqat admin importi va server uchun. Serverda saqlangan kalit tahlilga faqat umumiy muddatdan keyin beriladi. Import qilingan original HTML avtomatik joylanmaydi; jonli oyna `miniapp/` kodidan ishlaydi.
+
+Mavjud API manzili: `https://sxcdniihidqfqivfijtn.supabase.co/functions/v1/enzo-bot/api`. Barcha so‘rovlar POST, JSON. `/session`ga Telegram `init_data` yuboriladi; qolgan so‘rovlar qaytgan `token` bilan `Authorization: Bearer TOKEN` orqali autentifikatsiyalanadi. Oddiy Telegram ID yuborish kirish huquqini bermaydi. Boshqa HTML domenidan foydalanilsa, serverning ruxsat etilgan Mini App origini ham moslanishi kerak.
+
+- `/submit`: mavjud `run_id`, `mock_id`, `version`, `nonce`, `answers` formatini saqlaydi. Muvaffaqiyatli javob: `{"ok":true,"received":true,"results_available_at":"ISO vaqt","mock_id":"BIO-...","version":1}`. Ball yoki to‘g‘ri javoblar qaytmaydi.
+- `/list`: `history` ichida faqat shu akkaunt topshirgan testlar bor. `review_ready:false` bo‘lsa ball maydonlari yo‘q; tugagach `correct`, `total`, `percent` beriladi.
+- `/review`: `{"run_id":"24 belgili ichki test IDsi"}` yuboring. Server umumiy `ends_at` o‘tganini va aynan shu akkaunt topshirganini tekshiradi. Muddatgacha xato javobi keladi; savol/kalit berilmaydi.
+- Tahlil javobi: `mock`, `result`, `questions`, `server_time`. Har bir savolda `number`, `text`, `options`, `selected_answer`, `correct_answer`, `is_correct` bor. `selected_answer:"-"` — bo‘sh. Savollar fayl ko‘rinishida yaratilgan eski mocklarda `options:null` bo‘lishi mumkin.
+- Taymer/tugmaning frontendda ochilishi faqat ko‘rsatkich; server vaqt cheklovini mustaqil tekshiradi. HTML telefon soatini o‘zgartirish orqali javob ololmaydi. Tahlil oynasida `/start` yoki `/submit`ni chaqirmang.
 
 ## Texnik tuzilma
 
@@ -127,7 +139,7 @@ Mini Appni oddiy brauzerda ochish foydalanuvchini tizimga kiritmaydi. Botdagi `w
 - `bio_submissions`: Telegram ID, tashqi MOCK ID, versiya, savol IDlari, javoblar, vaqtlar, ball va avvalgi ruxsatli urinishlar.
 - `bio_begin` va `bio_submit_v2`: PostgreSQL soati va advisory lock orqali atomar start/topshirish; takroriy bir xil request idempotent.
 - Barcha jadvallar/RPC faqat `service_role` uchun. Brauzerga Supabase secret/service key yoki bot token yuborilmaydi.
-- API: `POST /api/session`, `/api/list`, `/api/start`, `/api/submit`. JSON limit 16 KB; faqat belgilangan Mini App origin uchun CORS; `no-store` javoblar.
+- API: `POST /api/session`, `/api/list`, `/api/start`, `/api/submit`, `/api/review`. JSON limit 16 KB; faqat belgilangan Mini App origin uchun CORS; `no-store` javoblar.
 - Telegram initData 5 daqiqagacha qabul qilinadi; server sessiyasi 5 soat; test davomiyligi 4 soatgacha. Auth token xotirada, qoralama javoblar foydalanuvchi+urinishga bog‘langan sessionStorage’da saqlanadi.
 
 ## Yangilash va qayta ishga tushirish

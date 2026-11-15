@@ -1,10 +1,10 @@
 const { Api } = require('grammy');
 const config = require('../config');
-const { BioMock: Mock, BioProfile: Profile, BioGroup: Group } = require('../storage/postgres');
+const { BioMock: Mock, BioProfile: Profile, BioGroup: Group, BioSubmission: Submission } = require('../storage/postgres');
 const { AuthError,validateInitData,issueSession,verifySession } = require('./auth');
 const { InputError } = require('./domain');
 const { boundedBytes,parseJSON } = require('./importer');
-const { openForUser,publicMock } = require('./catalog');
+const { openForUser,publicMock,reviewReady,reviewForUser } = require('./catalog');
 const service = require('./service');
 function answerArray(m,choices) {
   if (!choices || typeof choices!=='object' || Array.isArray(choices)) throw new InputError('answers obyekti kerak.');
@@ -36,10 +36,19 @@ async function handleApi(req, options={}) {
       const p=await Profile.findOne({telegram_id:user.id});
       const groups=await Group.find({_id:{$in:p?.group_ids || []},enabled:true});
       const mocks=await Mock.find({group_id:{$in:groups.map(g=>g._id)},status:{$in:['scheduled','opening','open']}}).sort({starts_at:1}).limit(30);
-      return reply({mocks:mocks.filter(m=>m.questions).map(m=>({run_id:m._id,mock_id:m.external_mock_id,version:m.version,title:m.title,question_count:m.count,starts_at:m.starts_at,ends_at:m.ends_at,status:m.status})),server_time:new Date().toISOString()});
+      const submissions=await Submission.find({telegram_id:user.id}).sort({submitted_at:-1}).limit(30);
+      const past=await Mock.find({_id:{$in:submissions.map(s=>s.mock_id)},status:{$in:['open','closed']}});
+      const byId=new Map(past.map(m=>[m._id,m]));
+      const history=submissions.filter(s=>byId.has(s.mock_id)).map(s=>{const m=byId.get(s.mock_id);return {
+        run_id:m._id,title:m.title,mock_id:m.external_mock_id||m.code,
+        ...(reviewReady(m)?{correct:s.correct,total:s.total,percent:s.percent}:{}),
+        ends_at:m.ends_at,review_ready:reviewReady(m),submitted_at:s.submitted_at,
+      };});
+      return reply({mocks:mocks.filter(m=>m.questions&&new Date(m.ends_at)>new Date()).map(m=>({run_id:m._id,mock_id:m.external_mock_id,version:m.version,title:m.title,question_count:m.count,starts_at:m.starts_at,ends_at:m.ends_at,status:m.status})),history,server_time:new Date().toISOString()});
     }
-    if (!['start','submit'].includes(action)) return reply({error:'Topilmadi.'},404);
+    if (!['start','submit','review'].includes(action)) return reply({error:'Topilmadi.'},404);
     if (!/^[a-f0-9]{24}$/.test(body.run_id||'')) throw new InputError('Mock tanlanmagan.');
+    if(action==='review') return reply({...await reviewForUser(user,body.run_id),server_time:new Date().toISOString()});
     if(action==='start') {
       const {m,attempt}=await openForUser(api,user,body.run_id);
       return reply({mock:publicMock(m),attempt,server_time:new Date().toISOString()});
@@ -49,8 +58,10 @@ async function handleApi(req, options={}) {
     // Recheck membership at submission; all time/attempt checks are atomic in SQL.
     await service.enroll(api,user,await Group.findById(m.group_id));
     if (!/^[a-f0-9]{32}$/.test(body.nonce||'')) throw new InputError('Urinish kaliti yaroqsiz.');
-    const result=service.accepted(await service.accept(m,user,answerArray(m,body.answers),body.nonce));
-    return reply({ok:true,correct:result.correct,total:result.total,wrong:result.total-result.correct,percent:result.percent,mock_id:m.external_mock_id,version:m.version});
+    service.accepted(await service.accept(m,user,answerArray(m,body.answers),body.nonce));
+    // Grade on the server now, but do not send scores or answer correctness to
+    // the student until the shared deadline, even on idempotent retries.
+    return reply({ok:true,received:true,results_available_at:m.ends_at,mock_id:m.external_mock_id,version:m.version});
   } catch(e) {
     if(e instanceof AuthError) return reply({error:e.message},401);
     if(e instanceof InputError) return reply({error:e.message},400);

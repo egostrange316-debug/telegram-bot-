@@ -3501,7 +3501,7 @@ var require_catalog = __commonJS({
   "src/biology/catalog.js"(exports, module) {
     var { randomBytes } = require_crypto();
     var { BioPackage: Package, BioMock: Mock, BioGroup: Group, BioAttempt: Attempt, BioSubmission: Submission } = require_postgres();
-    var { InputError } = require_domain();
+    var { InputError, localTime } = require_domain();
     var service = require_service();
     async function savePackage(data, editId) {
       const existing = await Package.findOne({ mock_id: data.mock_id, version: data.version });
@@ -3537,6 +3537,48 @@ var require_catalog = __commonJS({
         }))
       };
     }
+    function reviewReady(m, now = Date.now()) {
+      const end = new Date(m?.ends_at).getTime();
+      return ["open", "closed"].includes(m?.status) && Number.isFinite(end) && end <= now;
+    }
+    async function reviewForUser(user, runId) {
+      const m = await Mock.findById(runId);
+      const submission = m && await Submission.findOne({ mock_id: m._id, telegram_id: user.id });
+      if (!submission) throw new InputError("Bu test uchun o\u2018zingiz topshirgan natija topilmadi.");
+      if (!reviewReady(m)) throw new InputError(`Tahlil testning umumiy vaqti tugagach ochiladi: ${localTime(m.ends_at)} (Toshkent).`);
+      if (submission.answers?.length !== m.count || m.answer_key?.length !== m.count) throw new InputError("Bu eski natijaning javoblari to\u2018liq saqlanmagan.");
+      const questions = Array.from({ length: m.count }, (_, i) => {
+        const q = m.questions?.[i], selected = submission.answers[i];
+        return {
+          question_id: q?.question_id || String(i + 1),
+          number: i + 1,
+          source_topic: q?.source_topic || "",
+          text: q?.text || "Savol matni guruhga yuborilgan test faylida.",
+          options: q ? { A: q.options.A, B: q.options.B, C: q.options.C, D: q.options.D } : null,
+          selected_answer: selected,
+          correct_answer: m.answer_key[i],
+          is_correct: selected === m.answer_key[i]
+        };
+      });
+      return {
+        mock: {
+          run_id: m._id,
+          mock_id: m.external_mock_id || m.code,
+          version: m.version || 1,
+          title: m.title,
+          question_count: m.count,
+          ends_at: m.ends_at
+        },
+        result: {
+          correct: submission.correct,
+          total: submission.total,
+          percent: submission.percent,
+          blank: submission.blank,
+          submitted_at: submission.submitted_at
+        },
+        questions
+      };
+    }
     async function openForUser(api, user, runId) {
       const m = await Mock.findById(runId);
       if (!m?.questions || m.status !== "open" || new Date(m.starts_at) > /* @__PURE__ */ new Date() || new Date(m.ends_at) <= /* @__PURE__ */ new Date()) throw new InputError("Test boshlanmagan, muddati tugagan yoki bu faylli mock.");
@@ -3569,7 +3611,7 @@ var require_catalog = __commonJS({
         materials: []
       };
     }
-    module.exports = { savePackage, publicMock, openForUser, permitRetake, snapshot };
+    module.exports = { savePackage, publicMock, openForUser, permitRetake, snapshot, reviewReady, reviewForUser };
   }
 });
 
@@ -3799,7 +3841,7 @@ var require_biology = __commonJS({
     var config = require_config();
     var { BioProfile: Profile, BioGroup: Group, BioMock: Mock, BioSubmission: Submission } = require_postgres();
     var { persistentSession, getSession, setSession, clearSession, materialFromMessage } = require_common();
-    var { sendReport } = require_delivery();
+    var { sendReport, messageChunks } = require_delivery();
     var { InputError, esc, parseAnswers, answerText, localTime, parseLocal, isMember } = require_domain();
     var service = require_service();
     var { readSheet } = require_answer_reader();
@@ -3882,6 +3924,8 @@ var require_biology = __commonJS({
       return menu(ctx, "\u2705 Qatnashchilar ro\u2018yxatiga qo\u2018shildingiz. Yangi MOCK boshlanganda guruhga xabar keladi.");
     }
     async function selectMock(ctx, code) {
+      const completed = await Mock.findOne({ code });
+      if (catalog.reviewReady(completed)) return showReview(ctx, code);
       const m = await enrollForMock(ctx, code);
       clearSession(ctx.from.id);
       if (m.status !== "open" || new Date(m.starts_at) > /* @__PURE__ */ new Date()) {
@@ -3914,7 +3958,25 @@ ${config.MINIAPP_URL ? "\xABTestni boshlash\xBBni bosing \u2014 ilovada aynan sh
       return ctx.reply(`\u{1F4DD} ${m.title} \xB7 #${m.code}
 ${m.count} javobni raqamlab yuboring: 1A 2B 3C \u2026 yoki javob varaqasining rasmini yuboring.
 Bo\u2018sh javob: -. Oxirgi muddat: ${localTime(m.ends_at)} (Toshkent).
-Guruh reytingi mock tugagach chiqadi. Kalit faqat admin uchun.`);
+Natija va tahlil mockning umumiy vaqti tugagach ochiladi.`);
+    }
+    function reviewUrl(runId) {
+      const url = new URL(config.MINIAPP_URL);
+      url.searchParams.set("run", runId);
+      url.searchParams.set("mode", "review");
+      return url.toString();
+    }
+    async function showReview(ctx, code) {
+      const m = await Mock.findOne({ code });
+      const data = await catalog.reviewForUser(ctx.from, m?._id || "");
+      if (config.MINIAPP_URL) return ctx.reply(`\u{1F50D} ${data.mock.title} \u2014 test tahlili
+${data.result.correct}/${data.result.total} (${data.result.percent}%).
+O\u2018z javoblaringiz, to\u2018g\u2018ri javoblar va xatolarni ko\u2018ring. Bu oynada javoblar o\u2018zgarmaydi.`, {
+        reply_markup: new InlineKeyboard().webApp("\u{1F50D} Test tahlilini ochish", reviewUrl(m._id))
+      });
+      const text = data.questions.map((q) => `${q.is_correct ? "\u2705" : "\u274C"} ${q.number}. ${esc(q.text)}
+Siz: ${q.selected_answer === "-" ? "Bo\u2018sh" : q.selected_answer} \xB7 To\u2018g\u2018ri: ${q.correct_answer}`).join("\n\n");
+      return sendReport(ctx.api, ctx.chat.id, text);
     }
     async function prepareAnswer(ctx, m, text, reader) {
       if (!m || m.status !== "open" || new Date(m.starts_at) > /* @__PURE__ */ new Date() || new Date(m.ends_at) <= /* @__PURE__ */ new Date()) throw new InputError("Javob qabul qilish muddati tugagan yoki mock boshlanmagan.");
@@ -3937,13 +3999,23 @@ Tekshirib tasdiqlang. Xato bo\u2018lsa, javoblarni qayta yuboring. Tasdiq ham mu
       const rows = await Submission.find({ telegram_id: ctx.from.id }).sort({ submitted_at: -1 }).limit(30);
       const mocks = await Mock.find({ _id: { $in: rows.map((r) => r.mock_id) } });
       const byId = new Map(mocks.map((m) => [m._id, m]));
+      const kb = new InlineKeyboard();
       const texts = rows.filter((r) => byId.has(r.mock_id)).map((r) => {
         const m = byId.get(r.mock_id);
+        if (!catalog.reviewReady(m)) return `\u{1F9EC} <b>${esc(m.title)}</b> \xB7 #${m.code}
+\u2705 Javoblaringiz saqlandi.
+\u{1F512} Natija va tahlil ${localTime(m.ends_at)} (Toshkent) dan keyin ochiladi.`;
+        if (config.MINIAPP_URL) kb.webApp(`\u{1F50D} Tahlil \xB7 ${m.title.slice(0, 35)}`, reviewUrl(m._id)).row();
+        else kb.text(`\u{1F50D} Tahlil \xB7 ${m.title.slice(0, 35)}`, `br:${m.code}`).row();
         return `\u{1F9EC} <b>${esc(m.title)}</b> \xB7 #${m.code}
 ${r.correct}/${r.total} (${r.percent}%) \xB7 bo\u2018sh: ${r.blank}
-` + (r.mistakes.length ? `Xato yoki bo\u2018sh savollar: ${r.mistakes.join(", ")}` : "Barcha javoblar to\u2018g\u2018ri!");
+` + (r.mistakes.length ? `Xato yoki bo\u2018sh savollar: ${r.mistakes.join(", ")}` : "Barcha javoblar to\u2018g\u2018ri!") + "\n\u{1F50D} Test tahlili ochiq.";
       });
-      return sendReport(ctx.api, ctx.chat.id, texts.join("\n\n") || "Yakunlangan natija hali yo\u2018q. Ochiq mock natijasi muddati tugagach chiqadi.");
+      const chunks = messageChunks(texts.join("\n\n") || "Yakunlangan natija hali yo\u2018q.");
+      for (const [i, text] of chunks.entries()) await ctx.reply(text, {
+        parse_mode: "HTML",
+        ...i === chunks.length - 1 && kb.inline_keyboard.some((row) => row.length) ? { reply_markup: kb } : {}
+      });
     }
     async function showGroups(ctx, choosing = false) {
       await admin(ctx);
@@ -4109,11 +4181,12 @@ Chat ID: ${ctx.chat.id}`));
         const m = await Mock.findById(p.pending.mock_id), g = m && await Group.findById(m.group_id);
         if (ctx.chat.type !== "private" && ctx.chat.id !== g?.chat_id) throw new InputError("Guruh mos kelmadi.");
         await service.enroll(ctx.api, ctx.from, g);
-        const result = service.accepted(await service.accept(m, ctx.from, p.pending.answers, p.pending.nonce));
+        service.accepted(await service.accept(m, ctx.from, p.pending.answers, p.pending.nonce));
         await Profile.updateOne({ telegram_id: ctx.from.id, "pending.token": ctx.match[2] }, { $unset: { pending: 1 } });
         await ctx.answerCallbackQuery({ text: "\u2705 Javoblar qabul qilindi." });
-        return ctx.editMessageText(`\u2705 ${service.isOwner(ctx.from.id) ? "Sizning" : "O\u2018quvchining"} javoblari qabul qilindi \u2014 #${m.code}. Guruh reytingi ${localTime(m.ends_at)} dan keyin chiqadi. Qayta topshirish uchun admin ruxsati kerak.${ctx.chat.type === "private" ? `
-Natija: ${result.correct}/${result.total} (${result.percent}%). Xato: ${result.total - result.correct} ta.` : ""}`);
+        return ctx.editMessageText(`\u2705 ${service.isOwner(ctx.from.id) ? "Sizning" : "O\u2018quvchining"} javoblari qabul qilindi \u2014 #${m.code}.
+\u{1F512} Natija, to\u2018g\u2018ri javoblar va tahlil ${localTime(m.ends_at)} (Toshkent) dan keyin ochiladi.
+Qayta topshirish uchun admin ruxsati kerak.${ctx.chat.type === "private" ? "\nVaqt tugagach \u2192 Natijalarim." : ""}`);
       });
       bot.command("javob", async (ctx) => {
         const match = /^([a-f\d]{6})\s+([\s\S]+)$/i.exec(ctx.match.trim());
@@ -4150,6 +4223,7 @@ Natija: ${result.correct}/${result.total} (${result.percent}%). Xato: ${result.t
         clearSession(ctx.from.id);
         const payload = ctx.match.trim();
         if (/^g_[a-f\d]{24}$/.test(payload)) return joinGroup(ctx, payload.slice(2));
+        if (/^r_[a-f\d]{6}$/.test(payload)) return showReview(ctx, payload.slice(2));
         if (/^m_[a-f\d]{6}$/.test(payload)) return selectMock(ctx, payload.slice(2));
         return menu(ctx);
       });
@@ -4173,13 +4247,17 @@ Natija: ${result.correct}/${result.total} (${result.percent}%). Xato: ${result.t
       });
       bot.command("natijalar", personalResults);
       bot.hears(B.results, personalResults);
+      bot.callbackQuery(/^br:([a-f\d]{6})$/, async (ctx) => {
+        await ctx.answerCallbackQuery();
+        return showReview(ctx, ctx.match[1]);
+      });
       bot.hears(B.rank, async (ctx) => {
         const p = await service.profile(ctx.from), groups = await Group.find({ _id: { $in: p.group_ids }, enabled: true });
         for (const g of groups) await sendReport(ctx.api, ctx.chat.id, `<b>${esc(g.title)}</b>
 ` + await service.weeklyText(g._id, /* @__PURE__ */ new Date()));
         if (!groups.length) return ctx.reply("Avval guruhda \xABQatnashaman\xBB tugmasini bosing.");
       });
-      bot.hears(B.help, (ctx) => ctx.reply("1. Guruhda \xABQatnashaman\xBB bosing.\n2. Mockni muddatida ishlang.\n3. Botga yoki guruhdagi mock xabariga javob qilib javoblaringizni yuboring va tasdiqlang.\n4. Muddat tugagach guruh reytingi chiqadi. Kalit faqat admin uchun.\nRasm aniq o\u2018qilmasa: 1A 2B 3C \u2026 matnidan foydalaning.\nAdmin: botni guruhga admin qiling \u2192 /ulash."));
+      bot.hears(B.help, (ctx) => ctx.reply("1. Guruhda \xABQatnashaman\xBB bosing.\n2. Mockni muddatida ishlang.\n3. Botga yoki guruhdagi mock xabariga javob qilib javoblaringizni yuboring va tasdiqlang.\n4. Umumiy muddat tugagach natija, guruh reytingi va Natijalarim \u2192 Tahlil ochiladi.\nRasm aniq o\u2018qilmasa: 1A 2B 3C \u2026 matnidan foydalaning.\nAdmin: botni guruhga admin qiling \u2192 /ulash."));
       bot.hears(B.create, async (ctx) => {
         await admin(ctx);
         setSession(ctx.from.id, { step: "bio_title", data: { _id: randomBytes(12).toString("hex") } });
@@ -4348,11 +4426,11 @@ var require_api = __commonJS({
   "src/biology/api.js"(exports, module) {
     var { Api } = require_grammy();
     var config = require_config();
-    var { BioMock: Mock, BioProfile: Profile, BioGroup: Group } = require_postgres();
+    var { BioMock: Mock, BioProfile: Profile, BioGroup: Group, BioSubmission: Submission } = require_postgres();
     var { AuthError, validateInitData, issueSession, verifySession } = require_auth();
     var { InputError } = require_domain();
     var { boundedBytes, parseJSON } = require_importer();
-    var { openForUser, publicMock } = require_catalog();
+    var { openForUser, publicMock, reviewReady, reviewForUser } = require_catalog();
     var service = require_service();
     function answerArray(m, choices) {
       if (!choices || typeof choices !== "object" || Array.isArray(choices)) throw new InputError("answers obyekti kerak.");
@@ -4384,10 +4462,26 @@ var require_api = __commonJS({
           const p = await Profile.findOne({ telegram_id: user.id });
           const groups = await Group.find({ _id: { $in: p?.group_ids || [] }, enabled: true });
           const mocks = await Mock.find({ group_id: { $in: groups.map((g) => g._id) }, status: { $in: ["scheduled", "opening", "open"] } }).sort({ starts_at: 1 }).limit(30);
-          return reply({ mocks: mocks.filter((m2) => m2.questions).map((m2) => ({ run_id: m2._id, mock_id: m2.external_mock_id, version: m2.version, title: m2.title, question_count: m2.count, starts_at: m2.starts_at, ends_at: m2.ends_at, status: m2.status })), server_time: (/* @__PURE__ */ new Date()).toISOString() });
+          const submissions = await Submission.find({ telegram_id: user.id }).sort({ submitted_at: -1 }).limit(30);
+          const past = await Mock.find({ _id: { $in: submissions.map((s) => s.mock_id) }, status: { $in: ["open", "closed"] } });
+          const byId = new Map(past.map((m2) => [m2._id, m2]));
+          const history = submissions.filter((s) => byId.has(s.mock_id)).map((s) => {
+            const m2 = byId.get(s.mock_id);
+            return {
+              run_id: m2._id,
+              title: m2.title,
+              mock_id: m2.external_mock_id || m2.code,
+              ...reviewReady(m2) ? { correct: s.correct, total: s.total, percent: s.percent } : {},
+              ends_at: m2.ends_at,
+              review_ready: reviewReady(m2),
+              submitted_at: s.submitted_at
+            };
+          });
+          return reply({ mocks: mocks.filter((m2) => m2.questions && new Date(m2.ends_at) > /* @__PURE__ */ new Date()).map((m2) => ({ run_id: m2._id, mock_id: m2.external_mock_id, version: m2.version, title: m2.title, question_count: m2.count, starts_at: m2.starts_at, ends_at: m2.ends_at, status: m2.status })), history, server_time: (/* @__PURE__ */ new Date()).toISOString() });
         }
-        if (!["start", "submit"].includes(action)) return reply({ error: "Topilmadi." }, 404);
+        if (!["start", "submit", "review"].includes(action)) return reply({ error: "Topilmadi." }, 404);
         if (!/^[a-f0-9]{24}$/.test(body.run_id || "")) throw new InputError("Mock tanlanmagan.");
+        if (action === "review") return reply({ ...await reviewForUser(user, body.run_id), server_time: (/* @__PURE__ */ new Date()).toISOString() });
         if (action === "start") {
           const { m: m2, attempt } = await openForUser(api, user, body.run_id);
           return reply({ mock: publicMock(m2), attempt, server_time: (/* @__PURE__ */ new Date()).toISOString() });
@@ -4396,8 +4490,8 @@ var require_api = __commonJS({
         if (!m?.questions || body.mock_id !== m.external_mock_id || body.version !== m.version) throw new InputError("MOCK ID yoki version mos kelmadi.");
         await service.enroll(api, user, await Group.findById(m.group_id));
         if (!/^[a-f0-9]{32}$/.test(body.nonce || "")) throw new InputError("Urinish kaliti yaroqsiz.");
-        const result = service.accepted(await service.accept(m, user, answerArray(m, body.answers), body.nonce));
-        return reply({ ok: true, correct: result.correct, total: result.total, wrong: result.total - result.correct, percent: result.percent, mock_id: m.external_mock_id, version: m.version });
+        service.accepted(await service.accept(m, user, answerArray(m, body.answers), body.nonce));
+        return reply({ ok: true, received: true, results_available_at: m.ends_at, mock_id: m.external_mock_id, version: m.version });
       } catch (e) {
         if (e instanceof AuthError) return reply({ error: e.message }, 401);
         if (e instanceof InputError) return reply({ error: e.message }, 400);

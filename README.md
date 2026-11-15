@@ -39,7 +39,8 @@ Bir martalik 30/50 talik mockni yaqin daqiqaga yoki aniq kelajak sanasiga rejala
 - Rasm/matndan olingan javoblar qayta ko‘rsatiladi. **Javoblarni tasdiqlash** muddatdan oldin bosilishi kerak.
 - Qayta topshirish faqat adminning bir martalik ruxsati bilan mumkin. Reytingda bitta qatnashchi bitta natija oladi.
 - AI faqat rasm belgilarini o‘qiydi. Bahoni serverdagi tasdiqlangan kalit hisoblaydi; bir to‘g‘ri javob — bir ball.
-- Baho topshirgach shaxsiy chatda ko‘rinadi. Kalit faqat admin panelida. Muddatni bazaning soati ham tekshiradi.
+- Topshirgach faqat javoblar qabul qilingani ko‘rinadi. Baho va to‘g‘ri javoblar MOCKning umumiy tugash vaqtigacha yopiq. Muddatni server va baza tekshiradi.
+- Muddat tugagach **Natijalarim → 🔍 Tahlil** orqali savollar, o‘z javobingiz va to‘g‘ri javoblarni ko‘rasiz. Xato/bo‘sh savollar filtri bor. Bu faqat ko‘rish: natija o‘zgarmaydi va yangi urinish ochilmaydi.
 
 Bot egasi **O‘quvchi rejimi**da shu jarayon orqali topshiradi va reytingga kiradi.
 Admin tahriri uchun yana **Admin rejimi**ga qaytadi. Egaga kalit oldindan ma’lum bo‘lishi tabiiy.

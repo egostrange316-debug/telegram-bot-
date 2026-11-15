@@ -60,8 +60,8 @@ module.exports = async function run(rpc, db) {
     ok(reads===1&&p.pending.answers.length===50&&!JSON.stringify(p).includes('fixture-sheet'),'image answers are previewed without retaining the image reference');
     await cb(absent,`bc:${student}:${p.pending.token}`,chat);ok(await Submission.countDocuments({})===0,'another member cannot confirm someone else’s answers');
     const replyStart=calls.length;await cb(student,`bc:${student}:${p.pending.token}`);
-    ok(await Submission.countDocuments({})===1&&calls.slice(replyStart).some(c=>c.payload.text?.includes('50/50')),'accepted answers return the score privately without the key');
-    await msg(student,'/natijalar');ok(!calls.at(-1).payload.text.includes('→'),'personal results hide the key during an active mock');
+    ok(await Submission.countDocuments({})===1&&calls.slice(replyStart).some(c=>c.payload.text?.includes('javoblari qabul qilindi'))&&!calls.slice(replyStart).some(c=>c.payload.text?.includes('50/50')),'accepted answers give a receipt without revealing a score before the deadline');
+    await msg(student,'/natijalar');ok(!calls.at(-1).payload.text.includes('50/50')&&!calls.at(-1).payload.text.includes('savollar:'),'personal results hide scores and mistakes during an active mock');
     const otherGroup=await Group.create({chat_id:chat-1,title:'Other group'});
     await msg(student,`/javob ${m.code} ${answerText(key)}`,{},otherGroup.chat_id);
     ok(!(await Profile.findOne({telegram_id:student})).pending,'group submissions cannot cross group boundaries');
@@ -95,6 +95,7 @@ module.exports = async function run(rpc, db) {
     await db.exec('set role anon');await assert.rejects(db.query('select public.bio_submit($1,$2,$3::jsonb,$4)',[mid,student,JSON.stringify(key),'a'.repeat(24)]),/permission denied/);await db.exec('reset role');checks.push('anonymous clients cannot call the scoring RPC');
     await require('./import-flow')({msg,cb,owner,student,outsider,g,bot,checks,db,calls});
     await require('./join-flow')({msg,cb,outsider,bot,checks,calls});
+    await require('./review-flow')({msg,cb,bot,checks,calls});
     await require('./schedule-flow')(checks);
     return {ok:true,checks};
   } finally {

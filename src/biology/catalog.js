@@ -1,6 +1,6 @@
 const { randomBytes } = require('crypto');
 const { BioPackage: Package, BioMock: Mock, BioGroup: Group, BioAttempt: Attempt, BioSubmission: Submission } = require('../storage/postgres');
-const { InputError } = require('./domain');
+const { InputError, localTime } = require('./domain');
 const service = require('./service');
 async function savePackage(data, editId) {
   const existing = await Package.findOne({ mock_id:data.mock_id, version:data.version });
@@ -17,6 +17,30 @@ function publicMock(m) {
     question_count:m.count, starts_at:m.starts_at, ends_at:m.ends_at,
     questions:m.questions.map(q=>({question_id:q.question_id,source_topic:q.source_topic,source_question_number:q.source_question_number,text:q.text,
       options:{A:q.options.A,B:q.options.B,C:q.options.C,D:q.options.D}})) };
+}
+function reviewReady(m, now = Date.now()) {
+  const end = new Date(m?.ends_at).getTime();
+  return ['open', 'closed'].includes(m?.status) && Number.isFinite(end) && end <= now;
+}
+async function reviewForUser(user, runId) {
+  const m = await Mock.findById(runId);
+  const submission = m && await Submission.findOne({ mock_id: m._id, telegram_id: user.id });
+  if (!submission) throw new InputError('Bu test uchun o‘zingiz topshirgan natija topilmadi.');
+  if (!reviewReady(m)) throw new InputError(`Tahlil testning umumiy vaqti tugagach ochiladi: ${localTime(m.ends_at)} (Toshkent).`);
+  if (submission.answers?.length !== m.count || m.answer_key?.length !== m.count) throw new InputError('Bu eski natijaning javoblari to‘liq saqlanmagan.');
+  // Only a participant's own accepted submission is readable. Never begin an
+  // attempt, enroll, consume retake permission, or change scores in this path.
+  const questions = Array.from({ length: m.count }, (_, i) => {
+    const q = m.questions?.[i], selected = submission.answers[i];
+    return { question_id: q?.question_id || String(i + 1), number: i + 1,
+      source_topic: q?.source_topic || '', text: q?.text || 'Savol matni guruhga yuborilgan test faylida.',
+      options: q ? { A:q.options.A, B:q.options.B, C:q.options.C, D:q.options.D } : null,
+      selected_answer: selected, correct_answer: m.answer_key[i], is_correct: selected === m.answer_key[i] };
+  });
+  return { mock: { run_id:m._id, mock_id:m.external_mock_id || m.code, version:m.version || 1, title:m.title,
+    question_count:m.count, ends_at:m.ends_at },
+    result: { correct:submission.correct, total:submission.total, percent:submission.percent, blank:submission.blank,
+      submitted_at:submission.submitted_at }, questions };
 }
 async function openForUser(api,user,runId) {
   const m = await Mock.findById(runId);
@@ -39,4 +63,4 @@ function snapshot(p) {
   return { package_id:p._id,external_mock_id:p.mock_id,version:p.version,title:p.title,count:p.question_count,questions:p.questions,
     question_ids:p.questions.map(q=>q.question_id),grade:p.grade,topics:p.topics,answer_key:p.answer_key,materials:[] };
 }
-module.exports={savePackage,publicMock,openForUser,permitRetake,snapshot};
+module.exports={savePackage,publicMock,openForUser,permitRetake,snapshot,reviewReady,reviewForUser};

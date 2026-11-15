@@ -3,7 +3,7 @@ const { randomBytes } = require('crypto');
 const config = require('../config');
 const { BioProfile: Profile, BioGroup: Group, BioMock: Mock, BioSubmission: Submission } = require('../storage/postgres');
 const { persistentSession, getSession, setSession, clearSession, materialFromMessage } = require('../bot/common');
-const { sendReport } = require('../lib/delivery');
+const { sendReport, messageChunks } = require('../lib/delivery');
 const { InputError, esc, parseAnswers, answerText, localTime, parseLocal, isMember } = require('./domain');
 const service = require('./service');
 const { readSheet } = require('./answer-reader');
@@ -67,6 +67,8 @@ async function joinGroup(ctx, id) {
   return menu(ctx, '✅ Qatnashchilar ro‘yxatiga qo‘shildingiz. Yangi MOCK boshlanganda guruhga xabar keladi.');
 }
 async function selectMock(ctx, code) {
+  const completed = await Mock.findOne({ code });
+  if (catalog.reviewReady(completed)) return showReview(ctx, code);
   const m = await enrollForMock(ctx, code);
   clearSession(ctx.from.id);
   if (m.status !== 'open' || new Date(m.starts_at) > new Date()) {
@@ -86,7 +88,20 @@ async function selectMock(ctx, code) {
   }
   service.accepted(await service.begin(m,ctx.from));
   setSession(ctx.from.id, { step: 'bio_answer', data: { mock_id: m._id } });
-  return ctx.reply(`📝 ${m.title} · #${m.code}\n${m.count} javobni raqamlab yuboring: 1A 2B 3C … yoki javob varaqasining rasmini yuboring.\nBo‘sh javob: -. Oxirgi muddat: ${localTime(m.ends_at)} (Toshkent).\nGuruh reytingi mock tugagach chiqadi. Kalit faqat admin uchun.`);
+  return ctx.reply(`📝 ${m.title} · #${m.code}\n${m.count} javobni raqamlab yuboring: 1A 2B 3C … yoki javob varaqasining rasmini yuboring.\nBo‘sh javob: -. Oxirgi muddat: ${localTime(m.ends_at)} (Toshkent).\nNatija va tahlil mockning umumiy vaqti tugagach ochiladi.`);
+}
+function reviewUrl(runId) {
+  const url = new URL(config.MINIAPP_URL); url.searchParams.set('run', runId); url.searchParams.set('mode', 'review');
+  return url.toString();
+}
+async function showReview(ctx, code) {
+  const m = await Mock.findOne({ code });
+  const data = await catalog.reviewForUser(ctx.from, m?._id || '');
+  if (config.MINIAPP_URL) return ctx.reply(`🔍 ${data.mock.title} — test tahlili\n${data.result.correct}/${data.result.total} (${data.result.percent}%).\nO‘z javoblaringiz, to‘g‘ri javoblar va xatolarni ko‘ring. Bu oynada javoblar o‘zgarmaydi.`, {
+    reply_markup: new InlineKeyboard().webApp('🔍 Test tahlilini ochish', reviewUrl(m._id)),
+  });
+  const text = data.questions.map(q => `${q.is_correct ? '✅' : '❌'} ${q.number}. ${esc(q.text)}\nSiz: ${q.selected_answer === '-' ? 'Bo‘sh' : q.selected_answer} · To‘g‘ri: ${q.correct_answer}`).join('\n\n');
+  return sendReport(ctx.api, ctx.chat.id, text);
 }
 async function prepareAnswer(ctx, m, text, reader) {
   if (!m || m.status !== 'open' || new Date(m.starts_at) > new Date() || new Date(m.ends_at) <= new Date()) throw new InputError('Javob qabul qilish muddati tugagan yoki mock boshlanmagan.');
@@ -106,12 +121,20 @@ async function personalResults(ctx) {
   const rows = await Submission.find({ telegram_id: ctx.from.id }).sort({ submitted_at: -1 }).limit(30);
   const mocks = await Mock.find({ _id: { $in: rows.map(r => r.mock_id) } });
   const byId = new Map(mocks.map(m => [m._id, m]));
+  const kb = new InlineKeyboard();
   const texts = rows.filter(r => byId.has(r.mock_id)).map(r => {
     const m = byId.get(r.mock_id);
+    if (!catalog.reviewReady(m)) return `🧬 <b>${esc(m.title)}</b> · #${m.code}\n✅ Javoblaringiz saqlandi.\n🔒 Natija va tahlil ${localTime(m.ends_at)} (Toshkent) dan keyin ochiladi.`;
+    if (config.MINIAPP_URL) kb.webApp(`🔍 Tahlil · ${m.title.slice(0, 35)}`, reviewUrl(m._id)).row();
+    else kb.text(`🔍 Tahlil · ${m.title.slice(0, 35)}`, `br:${m.code}`).row();
     return `🧬 <b>${esc(m.title)}</b> · #${m.code}\n${r.correct}/${r.total} (${r.percent}%) · bo‘sh: ${r.blank}\n` +
-      (r.mistakes.length ? `Xato yoki bo‘sh savollar: ${r.mistakes.join(', ')}` : 'Barcha javoblar to‘g‘ri!');
+      (r.mistakes.length ? `Xato yoki bo‘sh savollar: ${r.mistakes.join(', ')}` : 'Barcha javoblar to‘g‘ri!') +
+      '\n🔍 Test tahlili ochiq.';
   });
-  return sendReport(ctx.api, ctx.chat.id, texts.join('\n\n') || 'Yakunlangan natija hali yo‘q. Ochiq mock natijasi muddati tugagach chiqadi.');
+  const chunks = messageChunks(texts.join('\n\n') || 'Yakunlangan natija hali yo‘q.');
+  for (const [i, text] of chunks.entries()) await ctx.reply(text, { parse_mode: 'HTML',
+    ...(i === chunks.length - 1 && kb.inline_keyboard.some(row => row.length) ? { reply_markup: kb } : {}),
+  });
 }
 async function showGroups(ctx, choosing = false) {
   await admin(ctx);
@@ -244,10 +267,10 @@ function createBot(options = {}) {
     const m = await Mock.findById(p.pending.mock_id), g = m && await Group.findById(m.group_id);
     if (ctx.chat.type !== 'private' && ctx.chat.id !== g?.chat_id) throw new InputError('Guruh mos kelmadi.');
     await service.enroll(ctx.api, ctx.from, g);
-    const result = service.accepted(await service.accept(m, ctx.from, p.pending.answers, p.pending.nonce));
+    service.accepted(await service.accept(m, ctx.from, p.pending.answers, p.pending.nonce));
     await Profile.updateOne({ telegram_id: ctx.from.id, 'pending.token': ctx.match[2] }, { $unset: { pending: 1 } });
     await ctx.answerCallbackQuery({ text: '✅ Javoblar qabul qilindi.' });
-    return ctx.editMessageText(`✅ ${service.isOwner(ctx.from.id) ? 'Sizning' : 'O‘quvchining'} javoblari qabul qilindi — #${m.code}. Guruh reytingi ${localTime(m.ends_at)} dan keyin chiqadi. Qayta topshirish uchun admin ruxsati kerak.${ctx.chat.type === 'private' ? `\nNatija: ${result.correct}/${result.total} (${result.percent}%). Xato: ${result.total-result.correct} ta.` : ''}`);
+    return ctx.editMessageText(`✅ ${service.isOwner(ctx.from.id) ? 'Sizning' : 'O‘quvchining'} javoblari qabul qilindi — #${m.code}.\n🔒 Natija, to‘g‘ri javoblar va tahlil ${localTime(m.ends_at)} (Toshkent) dan keyin ochiladi.\nQayta topshirish uchun admin ruxsati kerak.${ctx.chat.type === 'private' ? '\nVaqt tugagach → Natijalarim.' : ''}`);
   });
   bot.command('javob', async ctx => {
     const match = /^([a-f\d]{6})\s+([\s\S]+)$/i.exec(ctx.match.trim());
@@ -283,6 +306,7 @@ function createBot(options = {}) {
     clearSession(ctx.from.id);
     const payload = ctx.match.trim();
     if (/^g_[a-f\d]{24}$/.test(payload)) return joinGroup(ctx, payload.slice(2));
+    if (/^r_[a-f\d]{6}$/.test(payload)) return showReview(ctx, payload.slice(2));
     if (/^m_[a-f\d]{6}$/.test(payload)) return selectMock(ctx, payload.slice(2));
     return menu(ctx);
   });
@@ -297,12 +321,13 @@ function createBot(options = {}) {
   bot.command('mock', listMocks); bot.hears([B.mocks, B.answer], listMocks);
   bot.callbackQuery(/^bm:([a-f\d]{6})$/, async ctx => { await ctx.answerCallbackQuery(); return selectMock(ctx, ctx.match[1]); });
   bot.command('natijalar', personalResults); bot.hears(B.results, personalResults);
+  bot.callbackQuery(/^br:([a-f\d]{6})$/, async ctx => { await ctx.answerCallbackQuery(); return showReview(ctx, ctx.match[1]); });
   bot.hears(B.rank, async ctx => {
     const p = await service.profile(ctx.from), groups = await Group.find({ _id: { $in: p.group_ids }, enabled: true });
     for (const g of groups) await sendReport(ctx.api, ctx.chat.id, `<b>${esc(g.title)}</b>\n` + await service.weeklyText(g._id, new Date()));
     if (!groups.length) return ctx.reply('Avval guruhda «Qatnashaman» tugmasini bosing.');
   });
-  bot.hears(B.help, ctx => ctx.reply('1. Guruhda «Qatnashaman» bosing.\n2. Mockni muddatida ishlang.\n3. Botga yoki guruhdagi mock xabariga javob qilib javoblaringizni yuboring va tasdiqlang.\n4. Muddat tugagach guruh reytingi chiqadi. Kalit faqat admin uchun.\nRasm aniq o‘qilmasa: 1A 2B 3C … matnidan foydalaning.\nAdmin: botni guruhga admin qiling → /ulash.'));
+  bot.hears(B.help, ctx => ctx.reply('1. Guruhda «Qatnashaman» bosing.\n2. Mockni muddatida ishlang.\n3. Botga yoki guruhdagi mock xabariga javob qilib javoblaringizni yuboring va tasdiqlang.\n4. Umumiy muddat tugagach natija, guruh reytingi va Natijalarim → Tahlil ochiladi.\nRasm aniq o‘qilmasa: 1A 2B 3C … matnidan foydalaning.\nAdmin: botni guruhga admin qiling → /ulash.'));
   bot.hears(B.create, async ctx => { await admin(ctx); setSession(ctx.from.id, { step: 'bio_title', data: { _id: randomBytes(12).toString('hex') } }); return ctx.reply('Yangi biologiya mock nomini yuboring. /cancel — bekor qilish.'); });
   bot.hears(B.groups, ctx => showGroups(ctx));
   bot.hears(B.bank, async ctx => {

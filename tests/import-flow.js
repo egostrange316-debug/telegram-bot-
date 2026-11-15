@@ -32,13 +32,13 @@ module.exports=async({msg,cb,owner,student,outsider,g,bot,checks,db,calls})=>{
  const body={run_id:m._id,mock_id:m.external_mock_id,version:m.version,nonce,answers:choices,telegram_id:outsider,started_at:'2000-01-01',finished_at:'2000-01-02'};
  ok((await request('submit',{...body,version:2},token)).status===400,'API rejects a stale mock version');
  ok((await request('submit',body,token,'https://evil.example')).status===403,'foreign origins cannot invoke the Mini App');
- r=await request('submit',body,token);ok(r.data.correct===30&&r.data.percent===100,'Mini App grades all answers against the server key');
+ r=await request('submit',body,token);ok(r.data.received&&!('correct' in r.data)&&!('percent' in r.data)&&(await Submission.findOne({mock_id:m._id,telegram_id:student})).correct===30,'Mini App grades on the server but returns only a receipt until the shared deadline');
  const sub=await Submission.findOne({mock_id:m._id});ok(sub.telegram_id===student&&sub.version===1&&sub.external_mock_id===m.external_mock_id&&new Date(sub.started_at)>new Date('2026-01-01'),'submission binds signed Telegram identity, mock version and server timestamps');
- ok((await request('submit',body,token)).data.correct===30,'same submission retries are idempotent');
+ r=await request('submit',body,token);ok(r.data.received&&!('correct' in r.data)&&await Submission.countDocuments({mock_id:m._id})===1,'same submission retries are idempotent and cannot reveal the hidden score');
  ok((await request('submit',{...body,answers:{...choices,Q001:'D'}},token)).status===400,'changing submitted answers is blocked');
  await permitRetake(m.code,student);r=await request('start',{run_id:m._id},token);const next=r.data.attempt.nonce;
  ok(next!==nonce&&(await request('submit',body,token)).status===400,'admin retake starts a fresh attempt and rejects old-tab submissions');
- ok((await request('submit',{...body,nonce:next,answers:{...choices,Q001:'D'}},token)).data.correct===29,'granted retake updates leaderboard score');
+ r=await request('submit',{...body,nonce:next,answers:{...choices,Q001:'D'}},token);ok(r.data.received&&!('correct' in r.data)&&(await Submission.findOne({mock_id:m._id,telegram_id:student})).correct===29,'granted retake updates the stored score without revealing it early');
  ok((await Submission.findOne({mock_id:m._id})).history.length===1,'retake preserves earlier attempt for admin audit');
  // Owner solves the same imported test using Telegram buttons.
  await msg(owner,'🎓 O‘quvchi rejimi');await cb(owner,`bs:${m._id}`);let a=await Attempt.findOne({mock_id:m._id,telegram_id:owner});
