@@ -1,3 +1,17 @@
+# Qatnashishdan testga o‘tish — 2026-11-15
+
+- **Qatnashaman** guruh a’zoligini tekshirib, qatnashchini takrorlamasdan yozadi va `/start m_KOD` orqali botga yo‘naltiradi.
+- Import qilingan mock shaxsiy chatda bitta karta va **Testni boshlash** Mini App tugmasini beradi. `run` aynan tanlangan testni ochadi; karta ochish urinish/retake sarflamaydi.
+- Eski `bj:GURUH` tugmalari e’lon IDsi orqali mockni aniqlaydi. Umumiy guruh havolasi bitta ochiq testni ochadi; bir nechtasi bo‘lsa tanlash ro‘yxatini beradi.
+- Boshlanish eslatmasidan oldindan yozilish, vaqtgacha testni yopiq saqlash, begona a’zo/boshqa guruh/bekor qilingan testni rad etish tekshirildi.
+- `npm run test:biology`: 88 tekshiruv PASS (17 ta yangi qatnashish tekshiruvi), haqiqiy migratsiyalar bilan PGlite, Telegram API soxta.
+- `npm run test:unit`: 77 PASS; `npm run check`, `npm run build:edge`: PASS.
+- Telegram `getMe` bu botda `has_main_web_app: false` qaytardi. Joriy xavfsiz yo‘l: botga redirect → foydalanuvchi Mini App tugmasini bosadi. Ilova Telegram akkauntisiz avtomatik ochilgani da’vo qilinmaydi; haqiqiy Telegram mijozidagi yakuniy bosish sinovi foydalanuvchi tomonidan bajariladi.
+- Baza migratsiyasi yoki Mini App frontendini o‘zgartirish talab qilinmadi. Haqiqiy guruhga sun’iy sinov xabari yuborilmadi.
+- Supabase `enzo-bot` v7 ACTIVE holatiga joylandi. Deployda `import_map_path: deno.json` nisbiy yo‘li aniq beriladi; oldingi versiyaning vaqtinchalik absolyut yo‘li qayta ishlatilmaydi.
+
+---
+
 # MOCK boshlanish eslatmasi — 2026-11-15
 
 - Boshlanishiga 10 minut qolganda tanlangan guruhga bir martalik eslatma qo‘shildi. Kechroq rejalashtirilsa yoki cron tiklansa, qolgan minutlar ko‘rsatiladi.

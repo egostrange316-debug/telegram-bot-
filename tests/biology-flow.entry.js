@@ -25,7 +25,7 @@ module.exports = async function run(rpc, db) {
   });
   const from=id=>({id,is_bot:false,first_name:id===absent?'Absent':id===owner?'Owner':'Student'});
   const msg=(id,text,extra={},chatId=id)=>bot.handleUpdate({update_id:seq++,message:{message_id:seq++,date:1,from:from(id),chat:{id:chatId,type:chatId<0?'supergroup':'private',title:'Biology fixture'},...(text===null?{}:{text}),...(text?.startsWith('/')?{entities:[{type:'bot_command',offset:0,length:text.split(' ')[0].length}]}:{}),...extra}});
-  const cb=(id,data,chatId=id)=>bot.handleUpdate({update_id:seq++,callback_query:{id:String(seq++),from:from(id),chat_instance:'fixture',data,message:{message_id:10,date:1,chat:{id:chatId,type:chatId<0?'supergroup':'private'}}}});
+  const cb=(id,data,chatId=id,messageId=10)=>bot.handleUpdate({update_id:seq++,callback_query:{id:String(seq++),from:from(id),chat_instance:'fixture',data,message:{message_id:messageId,date:1,chat:{id:chatId,type:chatId<0?'supergroup':'private'}}}});
   try {
     await msg(former,'/ulash',{},chat);
     ok(await Group.countDocuments({})===0,'former admin cannot link a group');
@@ -94,6 +94,7 @@ module.exports = async function run(rpc, db) {
     ok(await Submission.countDocuments({mock_id:race._id,telegram_id:student})===1,'concurrent submissions keep exactly one participant result');
     await db.exec('set role anon');await assert.rejects(db.query('select public.bio_submit($1,$2,$3::jsonb,$4)',[mid,student,JSON.stringify(key),'a'.repeat(24)]),/permission denied/);await db.exec('reset role');checks.push('anonymous clients cannot call the scoring RPC');
     await require('./import-flow')({msg,cb,owner,student,outsider,g,bot,checks,db,calls});
+    await require('./join-flow')({msg,cb,outsider,bot,checks,calls});
     await require('./schedule-flow')(checks);
     return {ok:true,checks};
   } finally {

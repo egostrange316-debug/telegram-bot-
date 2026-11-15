@@ -55,7 +55,7 @@ async function openMock(api, group, mock, now) {
     `Guruh natijalari muddat tugagach chiqadi. Qayta topshirish faqat admin ruxsati bilan.`;
   if (!await delivered(`bio:open:${mock._id}:notice`, async () => {
     const msg = await api.sendMessage(group.chat_id, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [
-      [{ text: '📝 Botda javob topshirish', url: link }], [{ text: '🙋 Qatnashaman', callback_data: `bj:${group._id}` }],
+      [{ text: '🙋 Qatnashaman', callback_data: `bjoin:${mock.code}` }], [{ text: '📝 Botda javob topshirish', url: link }],
     ] } });
     await Mock.updateOne({ _id: mock._id }, { $set: { announcement_id: msg.message_id } });
   })) return;
@@ -124,7 +124,9 @@ async function tick(api, now = new Date()) {
           const minutes = Math.ceil(untilStart / 60_000);
           await delivered(`bio:prestart:${mock._id}`, () => api.sendMessage(group.chat_id,
             `⏰ ${mock.title} (#${mock.code})\nBoshlanishiga ${minutes} minut qoldi!\n` +
-            `🕒 Boshlanish: ${localTime(mock.starts_at)} (Toshkent).\nTayyor turing — test boshlanganda shu guruhga xabar yuboriladi.`));
+            `🕒 Boshlanish: ${localTime(mock.starts_at)} (Toshkent).\nTayyor turing — test boshlanganda shu guruhga xabar yuboriladi.`, {
+              reply_markup: { inline_keyboard: [[{ text: '🙋 Qatnashaman', callback_data: `bjoin:${mock.code}` }]] },
+            }));
         }
         if (['scheduled', 'opening'].includes(mock.status) && new Date(mock.starts_at) <= now) {
           if (new Date(mock.ends_at) <= now) {

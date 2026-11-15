@@ -24,6 +24,18 @@ Bot guruhga hali ulanmagan bo‘lsa: botni guruh admini qiling, guruhda `/ulash`
 
 **Qayta topshirish:** **🔄 Qayta topshirishga ruxsat** → `MOCKKOD TELEGRAM_ID`; yoki Natijalar → mock → Ruxsat berish → ID. Faqat ochiq mockda, bir marta, jami 5 urinishgacha. O‘quvchi mockni qayta ochadi. Avvalgi urinish tarixi saqlanadi; reytingda oxirgi ruxsat etilgan natija turadi. Muddat tugagach ruxsat ham topshirishni ochmaydi.
 
+## Qatnashchi uchun qisqa yo‘l
+
+1. Guruhdagi **🙋 Qatnashaman**ni bosing: guruh a’zoligi tekshiriladi va ro‘yxatga qo‘shilasiz.
+2. Bot shaxsiy chati shu mock bilan ochiladi. Birinchi kirishda Telegram **Start**ni so‘rashi mumkin.
+3. **🧬 Testni boshlash**ni bosing: Mini App akkauntingizni tasdiqlab, aynan shu mock savollarini ochadi.
+
+Testni boshqa menyudan qayta qidirish kerak emas. Mini App oynasini ochishda foydalanuvchi
+tugmani bosadi — bot uni chat xabari orqali o‘z-o‘zidan ochmaydi. Test boshlanmagan bo‘lsa,
+bot boshlanish vaqtini va **🔄 Testni ochish**ni ko‘rsatadi. Eski e’lonlardagi tugmalar ham ishlaydi.
+Bir guruhda bir nechta faol mock bo‘lsa, umumiy guruh havolasi tanlash ro‘yxatini ko‘rsatadi;
+aniq mock e’lonidagi tugma esa doim o‘sha testga olib boradi.
+
 ## ZIP formati
 
 Bitta MOCK uchun quyidagi fayllar bo‘lsin. Ular arxiv ildizida yoki oddiy papka ichida bo‘lishi mumkin:

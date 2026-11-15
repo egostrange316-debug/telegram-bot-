@@ -26,6 +26,12 @@ Bir martalik 30/50 talik mockni yaqin daqiqaga yoki aniq kelajak sanasiga rejala
 
 ## Javob topshirish
 
+- Guruhdagi **🙋 Qatnashaman** a’zolikni tekshiradi, qatnashchini ro‘yxatga qo‘shadi va
+  botning shaxsiy chatini aynan shu mock bilan ochadi. Telegram birinchi kirishda **Start**ni so‘rashi mumkin.
+- ZIP/JSON testida **🧬 Testni boshlash** bosilsa, Mini App darhol shu test savollarini ochadi;
+  mockni menyudan qayta tanlash shart emas. Mini App oynasini ochish uchun Telegram tugmasini bosish kerak.
+- Eski guruh e’lonlaridagi **Qatnashaman** ham shu yo‘lga o‘tadi. Boshlanish eslatmasidan
+  oldindan yozilish mumkin; test boshlanguncha faqat vaqt va **Testni ochish** tugmasi ko‘rsatiladi.
 - Botda mockni tanlab, `1A 2B 3C …` matni yoki javob varaqasining rasmini yuboring.
 - Guruhda mock e’loniga **reply** qilib shu matn/rasmni yuborish mumkin.
 - Guruhda `/javob MOCKKOD 1A 2B 3C …` ham ishlaydi; kod mock e’lonida yozilgan.
