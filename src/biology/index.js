@@ -7,6 +7,8 @@ const { sendReport } = require('../lib/delivery');
 const { InputError, esc, parseAnswers, answerText, localTime, parseLocal, isMember } = require('./domain');
 const service = require('./service');
 const { readSheet } = require('./answer-reader');
+const { C, registerImportUI, registerQuizUI } = require('./import-ui');
+const catalog = require('./catalog');
 const B = { mocks: '🧬 Mocklar', answer: '📝 Javob topshirish', results: '📊 Natijalarim', rank: '🏆 Reyting', help: 'ℹ️ Yordam',
   create: '➕ Mock yaratish', bank: '📚 Mocklar navbati', groups: '⚙️ Guruh sozlamalari', student: '🎓 O‘quvchi rejimi', admin: '🛠 Admin rejimi', done: '✅ Fayllar tayyor' };
 const commands = [ ['start', 'Boshlash'], ['menu', 'Asosiy menyu'], ['mock', 'Mocklar'], ['javob', 'Mock javoblarini topshirish'],
@@ -14,7 +16,7 @@ const commands = [ ['start', 'Boshlash'], ['menu', 'Asosiy menyu'], ['mock', 'Mo
 const days = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
 function keyboard(p, id) {
   const kb = new Keyboard();
-  if (service.isOwner(id) && p.mode === 'admin') kb.text(B.create).text(B.bank).row().text(B.groups).row().text(B.student);
+  if (service.isOwner(id) && p.mode === 'admin') kb.text(C.upload).text(C.all).row().text(C.edit).text(C.remove).row().text(C.send).text(C.key).row().text(C.results).text(C.rank).row().text(C.retake).row().text(B.create).text(B.bank).row().text(B.groups).row().text(B.student);
   else {
     kb.text(B.mocks).text(B.answer).row().text(B.results).text(B.rank).row().text(B.help);
     if (service.isOwner(id)) kb.row().text(B.admin);
@@ -51,30 +53,37 @@ async function selectMock(ctx, code) {
   if (!m || m.status !== 'open' || new Date(m.ends_at) <= new Date()) throw new InputError('Bu mock ochiq emas yoki muddati tugagan.');
   const group = await Group.findById(m.group_id);
   await service.enroll(ctx.api, ctx.from, group);
+  service.accepted(await service.begin(m,ctx.from));
+  if (m.questions) {
+    const kb = new InlineKeyboard().text('🧩 Botda ishlash', `bs:${m._id}`);
+    if (config.MINIAPP_URL) kb.row().webApp('🌐 Test oynasini ochish', `${config.MINIAPP_URL}?run=${m._id}`);
+    await ctx.reply(`${m.title} · ${m.count} savol. Ishlash usulini tanlang:`, {reply_markup:kb});
+  }
   setSession(ctx.from.id, { step: 'bio_answer', data: { mock_id: m._id } });
-  return ctx.reply(`📝 ${m.title} · #${m.code}\n${m.count} javobni raqamlab yuboring: 1A 2B 3C … yoki javob varaqasining rasmini yuboring.\nBo‘sh javob: -. Oxirgi muddat: ${localTime(m.ends_at)} (Toshkent).\nKalit va natija mock tugagandan keyin ko‘rsatiladi.`);
+  return ctx.reply(`📝 ${m.title} · #${m.code}\n${m.count} javobni raqamlab yuboring: 1A 2B 3C … yoki javob varaqasining rasmini yuboring.\nBo‘sh javob: -. Oxirgi muddat: ${localTime(m.ends_at)} (Toshkent).\nGuruh reytingi mock tugagach chiqadi. Kalit faqat admin uchun.`);
 }
 async function prepareAnswer(ctx, m, text, reader) {
   if (!m || m.status !== 'open' || new Date(m.starts_at) > new Date() || new Date(m.ends_at) <= new Date()) throw new InputError('Javob qabul qilish muddati tugagan yoki mock boshlanmagan.');
   const group = await Group.findById(m.group_id);
   if (ctx.chat.type !== 'private' && group?.chat_id !== ctx.chat.id) throw new InputError('Bu mock boshqa guruhga tegishli.');
   await service.enroll(ctx.api, ctx.from, group);
+  const attempt = service.accepted(await service.begin(m,ctx.from));
   const file = imageFile(ctx.message);
   const answers = file ? await aiAnswers(ctx, file, m.count, false, reader) : parseAnswers(text, m.count);
   const token = randomBytes(4).toString('hex');
-  await Profile.updateOne({ telegram_id: ctx.from.id }, { $set: { pending: { mock_id: m._id, answers, token, until: new Date(m.ends_at).toISOString() } } });
+  await Profile.updateOne({ telegram_id: ctx.from.id }, { $set: { pending: { mock_id: m._id, answers, nonce: attempt.nonce, token, until: new Date(m.ends_at).toISOString() } } });
   return ctx.reply(`${file ? 'Rasmdan o‘qilgan' : 'Kiritilgan'} javoblaringiz — #${m.code}:\n${answerText(answers)}\n\nTekshirib tasdiqlang. Xato bo‘lsa, javoblarni qayta yuboring. Tasdiq ham muddat tugashidan oldin bosilishi kerak.`, {
     reply_markup: new InlineKeyboard().text('✅ Javoblarni tasdiqlash', `bc:${ctx.from.id}:${token}`),
   });
 }
 async function personalResults(ctx) {
   const rows = await Submission.find({ telegram_id: ctx.from.id }).sort({ submitted_at: -1 }).limit(30);
-  const mocks = await Mock.find({ _id: { $in: rows.map(r => r.mock_id) }, status: 'closed' });
+  const mocks = await Mock.find({ _id: { $in: rows.map(r => r.mock_id) } });
   const byId = new Map(mocks.map(m => [m._id, m]));
   const texts = rows.filter(r => byId.has(r.mock_id)).map(r => {
     const m = byId.get(r.mock_id);
     return `🧬 <b>${esc(m.title)}</b> · #${m.code}\n${r.correct}/${r.total} (${r.percent}%) · bo‘sh: ${r.blank}\n` +
-      (r.mistakes.length ? `Xatolar (siz → kalit): ${r.mistakes.map(i => `${i}: ${r.answers[i - 1]}→${m.answer_key[i - 1]}`).join(', ')}` : 'Barcha javoblar to‘g‘ri!');
+      (r.mistakes.length ? `Xato yoki bo‘sh savollar: ${r.mistakes.join(', ')}` : 'Barcha javoblar to‘g‘ri!');
   });
   return sendReport(ctx.api, ctx.chat.id, texts.join('\n\n') || 'Yakunlangan natija hali yo‘q. Ochiq mock natijasi muddati tugagach chiqadi.');
 }
@@ -96,7 +105,7 @@ async function groupSettings(ctx, id) {
 }
 async function wizardPreview(ctx, s) {
   const g = await Group.findById(s.data.group_id);
-  const when = s.data.plan === 'weekly' ? 'Haftalik 50 talik navbatga' : s.data.plan === 'now' ? `Yaqin daqiqada, ${g.duration} daqiqa` : `${localTime(s.data.starts_at)}, ${g.duration} daqiqa`;
+  const when = s.data.plan === 'weekly' ? 'Haftalik 50 talik navbatga' : s.data.plan === 'now' ? `Yaqin daqiqada, ${g.duration} daqiqa` : `${localTime(s.data.starts_at)} — ${s.data.ends_at ? localTime(s.data.ends_at) : `${g.duration} daqiqa`}`;
   s.step = 'bio_publish'; setSession(ctx.from.id, s);
   return ctx.reply(`Tayyor mock:\n${s.data.title}\nSavollar: ${s.data.count}\nFayllar: ${s.data.materials.length}\nGuruh: ${g.title}\nVaqt: ${when}\n\nTasdiqlangach kalit va fayllar o‘zgarmaydi.`, {
     reply_markup: new InlineKeyboard().text('✅ Saqlash va rejalashtirish', `bpub:${s.data._id}`),
@@ -135,7 +144,9 @@ async function wizardMessage(ctx, s, reader) {
   }
   if (s.step === 'bio_key_confirm') { s.step = 'bio_key'; return wizardMessage(ctx, s, reader); }
   if (s.step === 'bio_date') {
-    const date = parseLocal(text);
+    const parts = text.split(' / ');
+    const date = parseLocal(parts[0]);
+    if (parts[1]) { const end = parseLocal(parts[1]); if (end <= date || end-date > 4*3600_000) throw new InputError('Tugash boshlanishdan keyin, 4 soat ichida bo‘lsin.'); s.data.ends_at = end.toISOString(); }
     if (date <= new Date()) throw new InputError('Kelajakdagi vaqtni kiriting.');
     s.data.starts_at = date.toISOString(); return wizardPreview(ctx, s);
   }
@@ -196,11 +207,10 @@ function createBot(options = {}) {
     const m = await Mock.findById(p.pending.mock_id), g = m && await Group.findById(m.group_id);
     if (ctx.chat.type !== 'private' && ctx.chat.id !== g?.chat_id) throw new InputError('Guruh mos kelmadi.');
     await service.enroll(ctx.api, ctx.from, g);
-    const result = await service.accept(m, ctx.from, p.pending.answers);
-    if (!result.ok) throw new InputError(result.reason === 'closed' ? 'Muddat tugagan. Javoblar qabul qilinmadi.' : 'Guruh a’zoligi tasdiqlanmadi.');
+    const result = service.accepted(await service.accept(m, ctx.from, p.pending.answers, p.pending.nonce));
     await Profile.updateOne({ telegram_id: ctx.from.id, 'pending.token': ctx.match[2] }, { $unset: { pending: 1 } });
     await ctx.answerCallbackQuery({ text: '✅ Javoblar qabul qilindi.' });
-    return ctx.editMessageText(`✅ ${service.isOwner(ctx.from.id) ? 'Sizning' : 'O‘quvchining'} javoblari qabul qilindi — #${m.code}. Natija ${localTime(m.ends_at)} dan keyin chiqadi. Muddatgacha javoblarni qayta topshirish mumkin.`);
+    return ctx.editMessageText(`✅ ${service.isOwner(ctx.from.id) ? 'Sizning' : 'O‘quvchining'} javoblari qabul qilindi — #${m.code}. Guruh reytingi ${localTime(m.ends_at)} dan keyin chiqadi. Qayta topshirish uchun admin ruxsati kerak.${ctx.chat.type === 'private' ? `\nNatija: ${result.correct}/${result.total} (${result.percent}%). Xato: ${result.total-result.correct} ta.` : ''}`);
   });
   bot.command('javob', async ctx => {
     const match = /^([a-f\d]{6})\s+([\s\S]+)$/i.exec(ctx.match.trim());
@@ -231,6 +241,7 @@ function createBot(options = {}) {
     }
     if (ctx.callbackQuery) return ctx.answerCallbackQuery({ text: 'Botning shaxsiy chatini oching.' });
   });
+  registerQuizUI(bot);
   bot.command('start', async ctx => {
     clearSession(ctx.from.id);
     const payload = ctx.match.trim();
@@ -254,7 +265,7 @@ function createBot(options = {}) {
     for (const g of groups) await sendReport(ctx.api, ctx.chat.id, `<b>${esc(g.title)}</b>\n` + await service.weeklyText(g._id, new Date()));
     if (!groups.length) return ctx.reply('Avval guruhda «Qatnashaman» tugmasini bosing.');
   });
-  bot.hears(B.help, ctx => ctx.reply('1. Guruhda «Qatnashaman» bosing.\n2. Mockni muddatida ishlang.\n3. Botga yoki guruhdagi mock xabariga javob qilib javoblaringizni yuboring va tasdiqlang.\n4. Muddat tugagach natija, kalit va reyting chiqadi.\nRasm aniq o‘qilmasa: 1A 2B 3C … matnidan foydalaning.\nAdmin: botni guruhga admin qiling → /ulash.'));
+  bot.hears(B.help, ctx => ctx.reply('1. Guruhda «Qatnashaman» bosing.\n2. Mockni muddatida ishlang.\n3. Botga yoki guruhdagi mock xabariga javob qilib javoblaringizni yuboring va tasdiqlang.\n4. Muddat tugagach guruh reytingi chiqadi. Kalit faqat admin uchun.\nRasm aniq o‘qilmasa: 1A 2B 3C … matnidan foydalaning.\nAdmin: botni guruhga admin qiling → /ulash.'));
   bot.hears(B.create, async ctx => { await admin(ctx); setSession(ctx.from.id, { step: 'bio_title', data: { _id: randomBytes(12).toString('hex') } }); return ctx.reply('Yangi biologiya mock nomini yuboring. /cancel — bekor qilish.'); });
   bot.hears(B.groups, ctx => showGroups(ctx));
   bot.hears(B.bank, async ctx => {
@@ -300,7 +311,7 @@ function createBot(options = {}) {
     if (ctx.match[1] === 'weekly' && s.data.count !== 50) throw new InputError('Haftalik mock 50 savollik bo‘lsin.');
     s.data.plan = ctx.match[1]; await ctx.answerCallbackQuery();
     if (s.data.plan !== 'date') return wizardPreview(ctx, s);
-    s.step = 'bio_date'; setSession(ctx.from.id, s); return ctx.reply('Boshlanish: YYYY-MM-DD HH:mm\nMasalan: 2026-11-22 20:00 (Toshkent).');
+    s.step = 'bio_date'; setSession(ctx.from.id, s); return ctx.reply('Boshlanish / tugash: YYYY-MM-DD HH:mm / YYYY-MM-DD HH:mm\nMasalan: 2026-11-22 20:00 / 2026-11-22 21:30 (Toshkent).\nFaqat boshlanish berilsa, guruhdagi davomiylik olinadi.');
   });
   bot.callbackQuery(/^bpub:([a-f\d]{24})$/, async ctx => {
     await admin(ctx); const s = getSession(ctx.from.id);
@@ -309,12 +320,14 @@ function createBot(options = {}) {
     if (!g?.enabled) throw new InputError('Guruh ulanmagan.');
     const start = d.plan === 'now' ? new Date(Math.ceil(Date.now() / 60_000) * 60_000) : d.plan === 'date' ? new Date(d.starts_at) : null;
     if (start && start < new Date()) throw new InputError('Tanlangan boshlanish vaqti o‘tdi. /cancel va qayta yarating.');
-    if (!await Mock.exists({ _id: d._id })) await Mock.create({ _id: d._id, code: randomBytes(3).toString('hex'), title: d.title, count: d.count,
+    const imported = d.package_id ? catalog.snapshot(await require('../storage/postgres').BioPackage.findById(d.package_id)) : {};
+    if (!await Mock.exists({ _id: d._id })) await Mock.create({ ...imported, _id: d._id, code: randomBytes(3).toString('hex'), title: d.title, count: d.count,
       materials: d.materials, answer_key: d.answer_key, group_id: g._id, status: start ? 'scheduled' : 'queued',
-      ...(start ? { starts_at: start, ends_at: new Date(start.getTime() + g.duration * 60_000) } : {}) });
+      ...(start ? { starts_at: start, ends_at: d.ends_at ? new Date(d.ends_at) : new Date(start.getTime() + g.duration * 60_000) } : {}) });
     clearSession(ctx.from.id); await ctx.answerCallbackQuery({ text: 'Mock saqlandi.' });
     return menu(ctx, start ? `✅ Mock ${localTime(start)} ga rejalashtirildi.` : `✅ 50 savollik mock haftalik navbatga qo‘shildi.${g.weekly_enabled ? '' : ' Guruh sozlamalaridan haftalik jadvalni yoqing.'}`);
   });
+  registerImportUI(bot, {admin, showGroups, menu, download:options.downloadImport});
   bot.on('message', async ctx => {
     const s = getSession(ctx.from.id);
     if (s?.step === 'bio_answer') return prepareAnswer(ctx, await Mock.findById(s.data.mock_id), ctx.message.text, reader);

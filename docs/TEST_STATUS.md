@@ -1,3 +1,22 @@
+# MOCK import va Mini App — 2026-11-15
+
+- `npm run test:unit`: 71 test PASS.
+- `npm run test:biology`: 52 ta oqim/xavfsizlik tekshiruvi PASS, haqiqiy migratsiyalar bilan PGlite.
+- `npm run test:postgres`: eski ENZO oqimlari uchun 17 regressiya tekshiruvi PASS.
+- `npm run check`, `npm run build:edge`: PASS.
+- ZIP/JSON: hajm, yo‘l, CRC, symlink, buzilgan arxiv, takroriy JSON maydonlari/IDlar, kalit va versiya tekshirildi.
+- Admin import → qoralama → tasdiq → jadval; bot tugmalarida ishlash; Mini App login/start/submit; noto‘g‘ri imzo/origin/versiya/vaqt; ruxsatli retake va eski oynaning nonce’sini rad etish tekshirildi.
+- Import testlari Telegram/Gemini tarmog‘ini mock qiladi. Jonli guruhga sinov xabari yuborilmadi.
+- Regressiya aniqlagan JSONB sort kalitlari tartibi xatosi tuzatildi: adapter ustuvorlik ro‘yxatini SQLga alohida uzatadi. Haftalik navbat va eski material tartibi saqlanadi.
+- Supabase `enzo-bot` v4 ACTIVE. Jonli `/health` 200, ruxsatsiz webhook/session/list 401, CORS preflight 204, cron 202.
+- Telegram webhook: pending 0, xato yo‘q. `setChatMenuButton` muvaffaqiyatli.
+- Mini App HTTPS manzili: https://biology-mock-enzo.egostrange316.chatgpt.site
+- Brauzerda Telegramdan tashqari kirish ekrani ko‘rildi. Haqiqiy Telegram akkauntining Mini App ichidagi yakuniy foydalanuvchi sinovi bajarilmagan; autentifikatsiya va topshirish oqimi avtomatlashtirilgan test bilan tekshirildi.
+- `anon`/`authenticated` rollari yangi RPC va yopiq kalitlarga kira olmaydi; `service_role` kiradi. Yangi xavfsizlik advisor muammosi yo‘q. Oldingi pg_net va alohida o‘yin jadvali ogohlantirishlari o‘zgartirilmagan.
+- Foydalanuvchining ikki yangi 30 savollik materiali ZIP/JSON formatiga moslashtirilib, import validatori bilan tekshirildi. Ularning kalitlari ochiq repoga yoki statik saytga qo‘yilmadi. Biologik mazmun va kalitning ilmiy to‘g‘riligi ushbu dasturiy tekshiruvning qismi emas.
+
+---
+
 # Biologiya botiga o‘tish — 2026-11-15
 
 - `npm run test:unit`: 65 test PASS.

@@ -6,10 +6,12 @@ const fs = require('node:fs');
     create schema vault; create table vault.decrypted_secrets(name text, decrypted_secret text);`);
   await db.exec(fs.readFileSync('supabase/sql/schema.sql','utf8'));
   await db.exec(fs.readFileSync('supabase/migrations/20261115072715_biology_mock.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261115085124_biology_import.sql','utf8'));
   const rpc = async (name, args = {}) => {
-    if (name === 'bio_submit') {
-      const result = await db.query('select public.bio_submit($1,$2,$3::jsonb,$4) as result',
-        [args.p_mock_id,args.p_telegram_id,JSON.stringify(args.p_answers),args.p_new_id]);
+    if (name === 'bio_begin' || name === 'bio_submit_v2') {
+      const start = name === 'bio_begin';
+      const params = start ? [args.p_mock_id,args.p_telegram_id,args.p_new_id,args.p_nonce] : [args.p_mock_id,args.p_telegram_id,JSON.stringify(args.p_answers),args.p_new_id,args.p_nonce];
+      const result = await db.query(start ? 'select public.bio_begin($1,$2,$3,$4) as result' : 'select public.bio_submit_v2($1,$2,$3::jsonb,$4,$5) as result', params);
       return result.rows[0].result;
     }
     if (name !== 'enzo_documents') throw new Error('Unexpected test RPC');

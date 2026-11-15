@@ -12,7 +12,7 @@ module.exports = async function run(rpc, db) {
   const checks=[],calls=[]; let seq=1, reads=0, failGroup=false, failResult=false;
   const ok=(value,label)=>{ assert.ok(value,label); checks.push(label); };
   const key=Array.from({length:50},(_,i)=>'ABCD'[i%4]);
-  const bot=createBot({readSheet:async()=>{reads++;return [...key];}});
+  const bot=createBot({downloadImport:async()=>require('../src/biology/importer').validatePackage(require('../examples/mock-30/import.json').mock,require('../examples/mock-30/import.json').answer_key),readSheet:async()=>{reads++;return [...key];}});
   bot.botInfo={id:123456789,is_bot:true,first_name:'Fixture',username:config.BOT_USERNAME};
   bot.api.config.use(async(_prev,method,payload)=>{
     calls.push({method,payload});
@@ -57,28 +57,32 @@ module.exports = async function run(rpc, db) {
     ok(reads===1&&p.pending.answers.length===50&&!JSON.stringify(p).includes('fixture-sheet'),'image answers are previewed without retaining the image reference');
     await cb(absent,`bc:${student}:${p.pending.token}`,chat);ok(await Submission.countDocuments({})===0,'another member cannot confirm someone else’s answers');
     const replyStart=calls.length;await cb(student,`bc:${student}:${p.pending.token}`);
-    ok(await Submission.countDocuments({})===1&&!calls.slice(replyStart).some(c=>c.payload.text?.includes('50/50')),'accepted answers do not leak the score before closing');
+    ok(await Submission.countDocuments({})===1&&calls.slice(replyStart).some(c=>c.payload.text?.includes('50/50')),'accepted answers return the score privately without the key');
     await msg(student,'/natijalar');ok(!calls.at(-1).payload.text.includes('→'),'personal results hide the key during an active mock');
     const otherGroup=await Group.create({chat_id:chat-1,title:'Other group'});
     await msg(student,`/javob ${m.code} ${answerText(key)}`,{},otherGroup.chat_id);
     ok(!(await Profile.findOne({telegram_id:student})).pending,'group submissions cannot cross group boundaries');
     const changed=[...key];changed[0]='D';
+    await msg(student,`/javob ${m.code} ${answerText(changed)}`,{},chat);
+    ok(!(await Profile.findOne({telegram_id:student})).pending,'resubmission is blocked without admin permission');
+    await require('../src/biology/catalog').permitRetake(m.code,student);
     await msg(student,`/javob ${m.code} ${answerText(changed)}`,{},chat);p=await Profile.findOne({telegram_id:student});
     await cb(student,`bc:${student}:${p.pending.token}`,chat);
-    ok(await Submission.countDocuments({})===1&&(await Submission.findOne({telegram_id:student})).correct===49,'group answers replace the same participant’s earlier submission');
+    ok(await Submission.countDocuments({})===1&&(await Submission.findOne({telegram_id:student})).correct===49,'admin-authorized retake replaces the score and preserves history');
     await msg(owner,B.student);await msg(owner,`/start m_${m.code}`);await msg(owner,answerText(key));p=await Profile.findOne({telegram_id:owner});await cb(owner,`bc:${owner}:${p.pending.token}`);
     ok((await Submission.findOne({telegram_id:owner})).correct===50,'owner participates as a normal student');
     await assert.rejects(service.accept(m,from(outsider),key).then(r=>{if(!r.ok)throw Error(r.reason);}),/membership/);
     checks.push('database rejects users outside the registered group');
+    await require('../src/biology/catalog').permitRetake(m.code,student);
     await assert.rejects(service.accept(m,from(student),['A']),/Invalid answers/);checks.push('database validates exact answer count');
     await Mock.updateOne({_id:mid},{$set:{ends_at:new Date(Date.now()-1000)}});
     ok((await service.accept(m,from(student),key)).reason==='closed','database clock rejects late submissions even before scheduler closes');
     failResult=true;await service.tick(bot.api,new Date());m=await Mock.findById(mid);
     ok(m.status==='closed'&&!m.reported,'failed result send is retryable after submission window closes');
     failResult=false;await service.tick(bot.api,new Date());m=await Mock.findById(mid);
-    ok(m.reported&&m.report_text.includes('Absent')&&m.report_text.includes('49/50')&&m.weekly_text.includes('Owner'),'deadline publishes key, scores, missing participants and weekly ranking');
+    ok(m.reported&&m.report_text.includes('Absent')&&m.report_text.includes('49/50')&&m.weekly_text.includes('Owner'),'deadline publishes scores, missing participants and weekly ranking');
     const endCalls=calls.length;await service.tick(bot.api,new Date());ok(calls.length===endCalls,'result report is not sent again on the next scheduler tick');
-    await msg(student,'/natijalar');ok(calls.at(-1).payload.text.includes('1: D→A'),'student can review exact mistakes after closing');
+    await msg(student,'/natijalar');ok(calls.at(-1).payload.text.includes('savollar: 1')&&!calls.at(-1).payload.text.includes('→'),'student sees mistaken question numbers without disclosure of the key');
     await Mock.create({code:'123abc',title:'Thirty',count:30,status:'queued',group_id:g._id,answer_key:key.slice(0,30),materials:[{kind:'text',text:'Thirty'}]});
     await service.tick(bot.api,new Date(now.getTime()+7*86400_000));
     ok((await Mock.findOne({code:'123abc'})).status==='queued'&&calls.some(c=>c.payload.chat_id===owner&&c.payload.text?.includes('navbatda yo‘q')),'weekly schedule never substitutes a 30-question paper or reuses last week’s mock');
@@ -86,9 +90,10 @@ module.exports = async function run(rpc, db) {
     await Promise.all([service.accept(race,from(student),key),service.accept(race,from(student),changed)]);
     ok(await Submission.countDocuments({mock_id:race._id,telegram_id:student})===1,'concurrent submissions keep exactly one participant result');
     await db.exec('set role anon');await assert.rejects(db.query('select public.bio_submit($1,$2,$3::jsonb,$4)',[mid,student,JSON.stringify(key),'a'.repeat(24)]),/permission denied/);await db.exec('reset role');checks.push('anonymous clients cannot call the scoring RPC');
+    await require('./import-flow')({msg,cb,owner,student,outsider,g,bot,checks,db,calls});
     return {ok:true,checks};
   } finally {
     await db.exec('reset role');
-    await db.exec("delete from public.enzo_documents_store where collection in ('bio_profiles','bio_groups','bio_mocks','bio_submissions','bot_sessions','bot_job_logs')");
+    await db.exec("delete from public.enzo_documents_store where collection in ('bio_profiles','bio_groups','bio_mocks','bio_submissions','bio_attempts','bio_packages','bot_sessions','bot_job_logs')");
   }
 };

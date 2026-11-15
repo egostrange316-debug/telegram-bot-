@@ -11,5 +11,5 @@ function check(dir) {
     }
   }
 }
-for (const dir of ['src', 'public', 'tests', 'scripts']) check(dir);
+for (const dir of ['src', 'public', 'tests', 'scripts', 'miniapp']) check(dir);
 console.log('JavaScript syntax OK');

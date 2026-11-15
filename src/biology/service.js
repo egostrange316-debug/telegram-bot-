@@ -1,6 +1,6 @@
 const { randomBytes } = require('crypto');
 const config = require('../config');
-const { BioProfile: Profile, BioGroup: Group, BioMock: Mock, BioSubmission: Submission, JobLog, submitBiology } = require('../storage/postgres');
+const { BioProfile: Profile, BioGroup: Group, BioMock: Mock, BioSubmission: Submission, JobLog, submitBiology, beginBiology } = require('../storage/postgres');
 const { deliverOnce, sendReport } = require('../lib/delivery');
 const { sendMaterial } = require('../bot/common');
 const { InputError, esc, answerText, localTime, latestSlot, weekStart, rank, isMember, DAY } = require('./domain');
@@ -24,8 +24,16 @@ async function delivered(key, send) {
   const log = await JobLog.findOne({ key });
   return Boolean(log && (!log.state || log.state === 'done'));
 }
-async function accept(mock, user, answers) {
-  return submitBiology({ p_mock_id: mock._id, p_telegram_id: user.id, p_answers: answers, p_new_id: randomBytes(12).toString('hex') });
+async function begin(mock, user) {
+  return beginBiology({ p_mock_id: mock._id, p_telegram_id: user.id, p_new_id: randomBytes(12).toString('hex'), p_nonce: randomBytes(16).toString('hex') });
+}
+function accepted(result) {
+  if (!result.ok) throw new InputError(({closed:'Mock boshlanmagan yoki muddati tugagan.',membership:'Guruh a’zoligi tasdiqlanmadi.',already:'Siz topshirgansiz. Qayta topshirishga admin ruxsati kerak.',stale:'Bu urinish eskirgan. Mockni botdan qayta oching.'})[result.reason] || 'Javob qabul qilinmadi.');
+  return result;
+}
+async function accept(mock, user, answers, nonce) {
+  if (!nonce) { const attempt = await begin(mock,user); if (!attempt.ok) return attempt; nonce = attempt.nonce; }
+  return submitBiology({ p_mock_id: mock._id, p_telegram_id: user.id, p_answers: answers, p_new_id: randomBytes(12).toString('hex'), p_nonce: nonce });
 }
 async function openMock(api, group, mock, now) {
   if (mock.status === 'scheduled') {
@@ -43,7 +51,7 @@ async function openMock(api, group, mock, now) {
     `🕒 ${localTime(mock.starts_at)} — ${localTime(mock.ends_at)} (Toshkent)\n\n` +
     `Barcha qatnashchilar topshirishi kerak. Botga yoki shu xabarga javob qilib A/B/C/D javoblaringizni yuboring.\n` +
     `Matn: <code>/javob ${mock.code} 1A 2B 3C …</code>\nRasm: raqamlar va belgilangan javoblar aniq ko‘rinsin.\n` +
-    `Natija va kalit muddat tugagach chiqadi. Tasdiqlangan oxirgi javoblar hisoblanadi.`;
+    `Guruh natijalari muddat tugagach chiqadi. Qayta topshirish faqat admin ruxsati bilan.`;
   if (!await delivered(`bio:open:${mock._id}:notice`, async () => {
     const msg = await api.sendMessage(group.chat_id, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [
       [{ text: '📝 Botda javob topshirish', url: link }], [{ text: '🙋 Qatnashaman', callback_data: `bj:${group._id}` }],
@@ -75,7 +83,7 @@ async function resultsText(mock) {
   const profiles = await Profile.find({ telegram_id: { $in: absentIds } });
   const names = new Map(profiles.map(p => [p.telegram_id, p.name]));
   return `✅ <b>${esc(mock.title)} — yakunlandi</b> · #${mock.code}\n` +
-    `Topshirdi: ${submissions.length}/${mock.roster.length}\n\n<b>Javob kaliti:</b>\n${answerText(mock.answer_key)}\n\n🏅 <b>Mock reytingi:</b>\n` +
+    `Topshirdi: ${submissions.length}/${mock.roster.length}\n\n🏅 <b>Mock reytingi:</b>\n` +
     (rank(submissions).map(s => `${s.place}. ${esc(s.name)} — <b>${s.correct}/${s.total}</b> (${s.percent}%)`).join('\n') || 'Hech kim topshirmadi.') +
     `\n\n❌ <b>Topshirmaganlar (${absentIds.length}):</b>\n` +
     (absentIds.map(id => esc(names.get(id) || `ID ${id}`)).join('\n') || 'Barcha ro‘yxatdagi qatnashchilar topshirdi.') +
@@ -125,4 +133,4 @@ async function tick(api, now = new Date()) {
     } catch (e) { console.error('Biology schedule failed', group._id, e.code || 'delivery'); }
   }
 }
-module.exports = { ownerId, isOwner, profile, enroll, accept, delivered, tick, weeklyText, resultsText, closeMock, openMock };
+module.exports = { ownerId, isOwner, profile, enroll, begin, accepted, accept, delivered, tick, weeklyText, resultsText, closeMock, openMock };

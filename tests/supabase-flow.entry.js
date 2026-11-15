@@ -43,7 +43,7 @@ module.exports = async function run(rpc) {
     await cb(aid,'ad:mdone');
     first=await Test.findOne({title:'Fixture HTML 1'});
     assert(first?.submission_mode==='screenshot'&&first.materials.length===2,'admin HTML and audio upload');
-    second=await Test.create({title:'Fixture HTML 2',exam:'ielts',section:'reading',order:2,submission_mode:'screenshot',materials:[{kind:'text',text:'fixture'}]});
+    second=await Test.create({_id:'000000000000000000000001',title:'Fixture HTML 2',exam:'ielts',section:'reading',order:2,submission_mode:'screenshot',materials:[{kind:'text',text:'fixture'}]});
     await cb(uid,`mf:${first._id}`);
     assert((await BotSession.findOne({telegram_id:uid})).data.testId===first._id,'selected material persists');
     await msg(uid,null,{photo:[{file_id:'fixture-result',file_unique_id:'fixture-result',width:100,height:100,file_size:10}]});

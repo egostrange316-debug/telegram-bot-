@@ -33,7 +33,7 @@ export function createHandler({ runtime, rpc, waitUntil, clock = Date.now, logge
       const ids = (settings.ADMIN_IDS || '').split(',').map(Number).filter(x => Number.isSafeInteger(x) && x > 0);
       if (!settings.BOT_TOKEN || !settings.WEBHOOK_SECRET || !settings.CRON_SECRET || !ids.length) throw new Error('Bot settings missing');
       Object.assign(runtime.config, { BOT_TOKEN: settings.BOT_TOKEN, GEMINI_API_KEY: settings.GEMINI_API_KEY || '',
-        ADMIN_IDS: ids, GEMINI_SCREENSHOT_MODEL: settings.GEMINI_SCREENSHOT_MODEL || 'gemini-3.1-flash-lite' });
+        ADMIN_IDS: ids, MINIAPP_URL: settings.MINIAPP_URL || '', GEMINI_SCREENSHOT_MODEL: settings.GEMINI_SCREENSHOT_MODEL || 'gemini-3.1-flash-lite' });
       runtime.configureDatabase(rpc);
       settingsAt = clock();
     })();
@@ -77,6 +77,9 @@ export function createHandler({ runtime, rpc, waitUntil, clock = Date.now, logge
   return async req => {
     const path = new URL(req.url).pathname;
     if (req.method === 'GET' && path.endsWith('/health')) return json({ ok: true, service: 'biology-mock-bot' });
+    if (/\/api\/(session|list|start|submit)$/.test(path)) {
+      try { await initialize(); return await runtime.handleApi(req); } catch { return json({error:'Temporarily unavailable'},503); }
+    }
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
     try {
       await initialize();

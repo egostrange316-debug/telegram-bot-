@@ -1,7 +1,7 @@
 {
   "name": "enzo-telegram-bot",
-  "version": "1.1.0",
-  "description": "ENZO mustaqil Telegram bot: IELTS/CEFR materiallari, skrinshot natijalari, tahlil, davomat va to'lov hisobotlari",
+  "version": "1.2.0",
+  "description": "Biologiya MOCK bot: ZIP/JSON import, Telegram Mini App, vaqtli testlar va guruh reytingi",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
@@ -25,6 +25,7 @@
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.6.1",
     "express": "^4.22.3",
+    "fflate": "0.8.2",
     "grammy": "^1.46.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.24.5"

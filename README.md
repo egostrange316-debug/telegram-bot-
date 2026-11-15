@@ -4,6 +4,12 @@ Supabase’da ishlaydigan Telegram bot: biologiya mocklari, A/B/C/D javob kaliti
 rasm yoki matndan javob qabul qilish, vaqt chegarasi va guruh reytingi.
 Eski IELTS/CEFR, davomat va to‘lov handlerlari jonli Edge botda ishlatilmaydi.
 
+## Yangi: ZIP/JSON import va Telegram Mini App
+
+**MOCK yuklash → qoralamani tekshirish → tasdiqlash → guruh va vaqt.**
+O‘quvchilar testni bot tugmalarida yoki xavfsiz Telegram HTML oynasida ishlaydi.
+[Import formatlari, namunalar va qayta ishga tushirish](docs/MOCK_IMPORT.md).
+
 ## Boshlash
 
 1. Bot egasi botga `/start` yuboradi. Faqat egada **Admin / O‘quvchi rejimi** tugmasi bor.
@@ -25,16 +31,16 @@ Bir martalik 30/50 talik mockni yaqin daqiqaga yoki aniq kelajak sanasiga rejala
 - Guruhda `/javob MOCKKOD 1A 2B 3C …` ham ishlaydi; kod mock e’lonida yozilgan.
 - Barcha savollarga A/B/C/D yoki bo‘sh qoldirilgan savol uchun `-` kiriting.
 - Rasm/matndan olingan javoblar qayta ko‘rsatiladi. **Javoblarni tasdiqlash** muddatdan oldin bosilishi kerak.
-- Muddatgacha qayta topshirish mumkin: oxirgi tasdiqlangan javob saqlanadi. Reytingda bitta qatnashchi bitta natija oladi.
+- Qayta topshirish faqat adminning bir martalik ruxsati bilan mumkin. Reytingda bitta qatnashchi bitta natija oladi.
 - AI faqat rasm belgilarini o‘qiydi. Bahoni serverdagi tasdiqlangan kalit hisoblaydi; bir to‘g‘ri javob — bir ball.
-- Kalit va baholar mock tugaguncha berilmaydi. Muddatni bazaning soati ham tekshiradi.
+- Baho topshirgach shaxsiy chatda ko‘rinadi. Kalit faqat admin panelida. Muddatni bazaning soati ham tekshiradi.
 
 Bot egasi **O‘quvchi rejimi**da shu jarayon orqali topshiradi va reytingga kiradi.
 Admin tahriri uchun yana **Admin rejimi**ga qaytadi. Egaga kalit oldindan ma’lum bo‘lishi tabiiy.
 
 ## Guruh hisobotlari
 
-Muddat tugagach bot javob kaliti, har bir topshirgan qatnashchining bali,
+Muddat tugagach bot har bir topshirgan qatnashchining bali,
 mock reytingi, topshirmaganlar va haftalik reytingni guruhga chiqaradi.
 Teng ball — teng o‘rin; haftalik reyting shu haftadagi to‘g‘ri javoblar yig‘indisi bo‘yicha.
 So‘nggi 10 daqiqada eslatma chiqadi. Xatolar tafsiloti shaxsiy **Natijalarim**da bor.
@@ -62,7 +68,7 @@ Guruh ulanishini `/uzish` bilan to‘xtatish mumkin. Bu tugallanmagan mocklarni 
 ## Kod va tekshiruv
 
 Jonli dastur: `src/edge/runtime.js` → `src/biology/`.
-`src/storage/postgres.js` — saqlash adapteri; `bio_submit` SQL funksiyasi — atomar qabul va baholash.
+`src/storage/postgres.js` — saqlash adapteri; `bio_submit_v2` SQL funksiyasi — atomar qabul va baholash.
 `supabase/functions/enzo-bot/` — maxfiy sarlavha bilan himoyalangan webhook va cron.
 
 ```bash
@@ -75,8 +81,9 @@ npm run build:edge
 ```
 
 Yangi loyiha: avval `supabase/sql/schema.sql`, keyin
-`supabase/migrations/20261115072715_biology_mock.sql`, Vault va cron sozlamalari.
-Mavjud ENZO bazasida faqat yangi biologiya migratsiyasi kerak.
+`supabase/migrations/20261115072715_biology_mock.sql`,
+`supabase/migrations/20261115085124_biology_import.sql`, Vault va cron sozlamalari.
+Mavjud bazada faqat hali qo‘llanmagan migratsiyalarni bajaring.
 Edge Function nomi va webhook URL o‘zgarmaydi: `enzo-bot`.
 `npm start` eski MongoDB/ENZO serveri bo‘lib qolgan; biologiya botini u orqali ishga tushirmang.
 

@@ -1,0 +1,410 @@
+{
+  "mock": {
+    "mock_id": "BIO7-FORMAT-DEMO",
+    "title": "FORMAT NAMUNASI — haqiqiy test emas",
+    "grade": 7,
+    "topics": [
+      "50–59"
+    ],
+    "question_count": 30,
+    "version": 1,
+    "questions": [
+      {
+        "question_id": "Q001",
+        "source_topic": "50",
+        "source_question_number": 1,
+        "text": "1-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q002",
+        "source_topic": "50",
+        "source_question_number": 2,
+        "text": "2-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q003",
+        "source_topic": "50",
+        "source_question_number": 3,
+        "text": "3-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q004",
+        "source_topic": "50",
+        "source_question_number": 4,
+        "text": "4-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q005",
+        "source_topic": "50",
+        "source_question_number": 5,
+        "text": "5-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q006",
+        "source_topic": "50",
+        "source_question_number": 6,
+        "text": "6-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q007",
+        "source_topic": "50",
+        "source_question_number": 7,
+        "text": "7-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q008",
+        "source_topic": "50",
+        "source_question_number": 8,
+        "text": "8-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q009",
+        "source_topic": "50",
+        "source_question_number": 9,
+        "text": "9-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q010",
+        "source_topic": "50",
+        "source_question_number": 10,
+        "text": "10-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q011",
+        "source_topic": "50",
+        "source_question_number": 11,
+        "text": "11-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q012",
+        "source_topic": "50",
+        "source_question_number": 12,
+        "text": "12-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q013",
+        "source_topic": "50",
+        "source_question_number": 13,
+        "text": "13-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q014",
+        "source_topic": "50",
+        "source_question_number": 14,
+        "text": "14-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q015",
+        "source_topic": "50",
+        "source_question_number": 15,
+        "text": "15-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q016",
+        "source_topic": "50",
+        "source_question_number": 16,
+        "text": "16-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q017",
+        "source_topic": "50",
+        "source_question_number": 17,
+        "text": "17-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q018",
+        "source_topic": "50",
+        "source_question_number": 18,
+        "text": "18-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q019",
+        "source_topic": "50",
+        "source_question_number": 19,
+        "text": "19-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q020",
+        "source_topic": "50",
+        "source_question_number": 20,
+        "text": "20-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q021",
+        "source_topic": "50",
+        "source_question_number": 21,
+        "text": "21-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q022",
+        "source_topic": "50",
+        "source_question_number": 22,
+        "text": "22-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q023",
+        "source_topic": "50",
+        "source_question_number": 23,
+        "text": "23-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q024",
+        "source_topic": "50",
+        "source_question_number": 24,
+        "text": "24-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q025",
+        "source_topic": "50",
+        "source_question_number": 25,
+        "text": "25-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q026",
+        "source_topic": "50",
+        "source_question_number": 26,
+        "text": "26-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q027",
+        "source_topic": "50",
+        "source_question_number": 27,
+        "text": "27-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q028",
+        "source_topic": "50",
+        "source_question_number": 28,
+        "text": "28-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q029",
+        "source_topic": "50",
+        "source_question_number": 29,
+        "text": "29-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      },
+      {
+        "question_id": "Q030",
+        "source_topic": "50",
+        "source_question_number": 30,
+        "text": "30-savol matnini shu yerga yozing. Bu format namunasi.",
+        "options": {
+          "A": "A variant matni",
+          "B": "B variant matni",
+          "C": "C variant matni",
+          "D": "D variant matni"
+        }
+      }
+    ]
+  },
+  "answer_key": {
+    "mock_id": "BIO7-FORMAT-DEMO",
+    "version": 1,
+    "answers": {
+      "Q001": "A",
+      "Q002": "B",
+      "Q003": "C",
+      "Q004": "D",
+      "Q005": "A",
+      "Q006": "B",
+      "Q007": "C",
+      "Q008": "D",
+      "Q009": "A",
+      "Q010": "B",
+      "Q011": "C",
+      "Q012": "D",
+      "Q013": "A",
+      "Q014": "B",
+      "Q015": "C",
+      "Q016": "D",
+      "Q017": "A",
+      "Q018": "B",
+      "Q019": "C",
+      "Q020": "D",
+      "Q021": "A",
+      "Q022": "B",
+      "Q023": "C",
+      "Q024": "D",
+      "Q025": "A",
+      "Q026": "B",
+      "Q027": "C",
+      "Q028": "D",
+      "Q029": "A",
+      "Q030": "B"
+    }
+  }
+}

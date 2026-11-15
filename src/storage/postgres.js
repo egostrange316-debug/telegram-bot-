@@ -34,7 +34,7 @@ class Query {
     if (!rpc) throw new Error('Postgres adapter is not configured');
     let data = await rpc('enzo_documents', { p_collection: this.model.collection, p_operation: this.op,
       p_filter: this.filter || {}, p_update: this.update || {}, p_sort: this.ordering,
-      p_limit: this.take || 0, p_options: { ...this.options, defaults: this.model.defaults,
+      p_limit: this.take || 0, p_options: { ...this.options, sort_fields: Object.keys(this.ordering), defaults: this.model.defaults,
         timestamps: this.model.timestamps, new_id: randomBytes(12).toString('hex') } });
     data = revive(data);
     if (['find', 'findOne', 'findOneAndUpdate', 'findOneAndDelete', 'create'].includes(this.op)) {
@@ -98,5 +98,8 @@ model('BioProfile', 'bio_profiles', { group_ids: [], mode: 'student' });
 model('BioGroup', 'bio_groups', { enabled: true, weekly_enabled: false, weekday: 0, time: '20:00', duration: 90 });
 model('BioMock', 'bio_mocks', { status: 'draft', materials: [], roster: [] });
 model('BioSubmission', 'bio_submissions');
-const submitBiology = args => rpc('bio_submit', args);
-module.exports = { ...models, configureDatabase, revive, project, submitBiology };
+model('BioPackage', 'bio_packages', { status: 'draft' });
+model('BioAttempt', 'bio_attempts');
+const beginBiology = args => rpc('bio_begin', args);
+const submitBiology = args => rpc('bio_submit_v2', args);
+module.exports = { ...models, configureDatabase, revive, project, submitBiology, beginBiology };
