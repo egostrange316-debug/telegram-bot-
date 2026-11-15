@@ -477,6 +477,7 @@ var require_service = __commonJS({
     var { deliverOnce, sendReport } = require_delivery();
     var { sendMaterial } = require_common();
     var { InputError, esc, answerText, localTime, latestSlot, weekStart, rank, isMember, DAY } = require_domain();
+    var START_REMINDER_MS = 10 * 6e4;
     var ownerId = () => config.ADMIN_IDS[0];
     var isOwner = (id) => Number.isSafeInteger(id) && id === ownerId();
     var fullName = (user) => [user.first_name, user.last_name].filter(Boolean).join(" ").replace(/[\x00-\x1f]/g, " ").slice(0, 100) || "O\u2018quvchi";
@@ -599,7 +600,7 @@ Topshirdi: ${submissions.length}/${mock.roster.length}
       for (const group of groups) {
         try {
           if (group.weekly_enabled) {
-            const slot = latestSlot(group, now), end = new Date(slot.getTime() + group.duration * 6e4);
+            const slot = latestSlot(group, new Date(now.getTime() + START_REMINDER_MS)), end = new Date(slot.getTime() + group.duration * 6e4);
             if (now < end && !await Mock.exists({ group_id: group._id, weekly_slot: slot.toISOString() })) {
               const queued = await Mock.find({ group_id: group._id, status: "queued", count: 50 }).sort({ createdAt: 1, _id: 1 }).limit(1);
               if (queued.length) await Mock.updateOne({ _id: queued[0]._id, status: "queued" }, { $set: { status: "scheduled", weekly_slot: slot.toISOString(), starts_at: slot, ends_at: end } });
@@ -608,6 +609,17 @@ Topshirdi: ${submissions.length}/${mock.roster.length}
           }
           const mocks = await Mock.find({ group_id: group._id, status: { $in: ["scheduled", "opening", "open", "closed"] }, reported: { $ne: true } }).sort({ starts_at: 1 });
           for (let mock of mocks) {
+            const untilStart = new Date(mock.starts_at) - now;
+            if (mock.status === "scheduled" && untilStart > 0 && untilStart <= START_REMINDER_MS) {
+              const minutes = Math.ceil(untilStart / 6e4);
+              await delivered(`bio:prestart:${mock._id}`, () => api.sendMessage(
+                group.chat_id,
+                `\u23F0 ${mock.title} (#${mock.code})
+Boshlanishiga ${minutes} minut qoldi!
+\u{1F552} Boshlanish: ${localTime(mock.starts_at)} (Toshkent).
+Tayyor turing \u2014 test boshlanganda shu guruhga xabar yuboriladi.`
+              ));
+            }
             if (["scheduled", "opening"].includes(mock.status) && new Date(mock.starts_at) <= now) {
               if (new Date(mock.ends_at) <= now) {
                 await Mock.updateOne({ _id: mock._id, status: mock.status }, { $set: { status: "missed" } });

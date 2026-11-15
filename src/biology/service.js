@@ -4,6 +4,7 @@ const { BioProfile: Profile, BioGroup: Group, BioMock: Mock, BioSubmission: Subm
 const { deliverOnce, sendReport } = require('../lib/delivery');
 const { sendMaterial } = require('../bot/common');
 const { InputError, esc, answerText, localTime, latestSlot, weekStart, rank, isMember, DAY } = require('./domain');
+const START_REMINDER_MS = 10 * 60_000;
 const ownerId = () => config.ADMIN_IDS[0];
 const isOwner = id => Number.isSafeInteger(id) && id === ownerId();
 const fullName = user => [user.first_name, user.last_name].filter(Boolean).join(' ').replace(/[\x00-\x1f]/g, ' ').slice(0, 100) || 'O‘quvchi';
@@ -107,7 +108,9 @@ async function tick(api, now = new Date()) {
   for (const group of groups) {
     try {
       if (group.weekly_enabled) {
-        const slot = latestSlot(group, now), end = new Date(slot.getTime() + group.duration * 60_000);
+        // Reserve the next weekly paper early enough to announce it, but keep
+        // submissions and materials locked until its actual starting time.
+        const slot = latestSlot(group, new Date(now.getTime() + START_REMINDER_MS)), end = new Date(slot.getTime() + group.duration * 60_000);
         if (now < end && !await Mock.exists({ group_id: group._id, weekly_slot: slot.toISOString() })) {
           const queued = await Mock.find({ group_id: group._id, status: 'queued', count: 50 }).sort({ createdAt: 1, _id: 1 }).limit(1);
           if (queued.length) await Mock.updateOne({ _id: queued[0]._id, status: 'queued' }, { $set: { status: 'scheduled', weekly_slot: slot.toISOString(), starts_at: slot, ends_at: end } });
@@ -116,6 +119,13 @@ async function tick(api, now = new Date()) {
       }
       const mocks = await Mock.find({ group_id: group._id, status: { $in: ['scheduled', 'opening', 'open', 'closed'] }, reported: { $ne: true } }).sort({ starts_at: 1 });
       for (let mock of mocks) {
+        const untilStart = new Date(mock.starts_at) - now;
+        if (mock.status === 'scheduled' && untilStart > 0 && untilStart <= START_REMINDER_MS) {
+          const minutes = Math.ceil(untilStart / 60_000);
+          await delivered(`bio:prestart:${mock._id}`, () => api.sendMessage(group.chat_id,
+            `⏰ ${mock.title} (#${mock.code})\nBoshlanishiga ${minutes} minut qoldi!\n` +
+            `🕒 Boshlanish: ${localTime(mock.starts_at)} (Toshkent).\nTayyor turing — test boshlanganda shu guruhga xabar yuboriladi.`));
+        }
         if (['scheduled', 'opening'].includes(mock.status) && new Date(mock.starts_at) <= now) {
           if (new Date(mock.ends_at) <= now) {
             await Mock.updateOne({ _id: mock._id, status: mock.status }, { $set: { status: 'missed' } });

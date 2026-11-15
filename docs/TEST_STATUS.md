@@ -1,3 +1,16 @@
+# MOCK boshlanish eslatmasi — 2026-11-15
+
+- Boshlanishiga 10 minut qolganda tanlangan guruhga bir martalik eslatma qo‘shildi. Kechroq rejalashtirilsa yoki cron tiklansa, qolgan minutlar ko‘rsatiladi.
+- Haftalik 50 talik navbat boshlanishdan 10 minut oldin tayyorlanadi; savollar va javob qabul qilish belgilangan vaqtgacha yopiq turadi.
+- `npm run test:biology`: 71 tekshiruv PASS (14 ta yangi jadval tekshiruvi), PGlite va soxta Telegram API bilan.
+- Sinovlar: vaqt chegarasi, Toshkent vaqti, takror yubormaslik, yuborish xatosidan qayta urinish, bekor qilingan/tugagan test, o‘chirilgan guruh va haftalik navbat tartibi.
+- `npm run test:unit`: 77 PASS; `npm run check` va `npm run build:edge`: PASS.
+- Jonli cron faol, har daqiqada ishlaydi; oxirgi bajarilishi muvaffaqiyatli. Baza migratsiyasi va yangi sozlama kerak emas.
+- Supabase `enzo-bot` v6 ACTIVE holatiga joylandi.
+- Telegram guruhiga sun’iy sinov xabari yuborilmadi.
+
+---
+
 # Umumiy ZIP importi tuzatildi — 2026-11-15
 
 - Sabab: parser faqat 2–3 ta yozuvli ZIPni qabul qilgan; oldingi ChatGPT arxivida ikki MOCK uchun 6 ta fayl bor edi. Asl arxiv bilan aynan foydalanuvchi aytgan xato qayta hosil qilindi.

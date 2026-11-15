@@ -43,7 +43,11 @@ Admin tahriri uchun yana **Admin rejimi**ga qaytadi. Egaga kalit oldindan ma’l
 Muddat tugagach bot har bir topshirgan qatnashchining bali,
 mock reytingi, topshirmaganlar va haftalik reytingni guruhga chiqaradi.
 Teng ball — teng o‘rin; haftalik reyting shu haftadagi to‘g‘ri javoblar yig‘indisi bo‘yicha.
-So‘nggi 10 daqiqada eslatma chiqadi. Xatolar tafsiloti shaxsiy **Natijalarim**da bor.
+Boshlanishiga 10 minut qolganda guruhga bir marta eslatma chiqadi; bu sana bilan
+rejalashtirilgan va haftalik mocklar uchun avtomatik ishlaydi. Test 10 minutdan kam
+vaqtga rejalashtirilsa, keyingi tekshiruvda qolgan minutlar ko‘rsatiladi. Tekshiruv har
+daqiqada, shuning uchun xabar bir daqiqagacha kechikishi mumkin. Test oldindan ochilmaydi.
+Tugashiga 10 daqiqa qolganda ham alohida eslatma chiqadi. Xatolar tafsiloti shaxsiy **Natijalarim**da bor.
 
 Telegram botga guruhning avvalgi barcha a’zolari ro‘yxatini bermaydi. Shuning uchun
 hisobot **Qatnashaman** bosganlar, botga guruh havolasi orqali kirganlar va bot ko‘rgan

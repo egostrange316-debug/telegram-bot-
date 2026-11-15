@@ -11,6 +11,11 @@
 7. Sana uchun `2026-11-22 20:00 / 2026-11-22 21:30` formatida boshlanish va tugashni kiriting (Toshkent). Faqat boshlanish berilsa guruh davomiyligi ishlatiladi. Eng ko‘pi 4 soat.
 8. **📊 Natijalar** / **🏆 Leaderboard** orqali natijalarni ko‘ring.
 
+**Boshlanish eslatmasi:** bot boshlanishiga 10 minut qolganda tanlangan guruhga bir
+marta xabar yuboradi. 10 minutdan kam vaqt qolgan bo‘lsa, qolgan minutni yozadi.
+Bu oldindan rejalashtirilgan mocklar va haftalik navbat uchun avtomatik; alohida yoqish
+shart emas. Savollar va javob topshirish faqat belgilangan boshlanish vaqtida ochiladi.
+
 Bot guruhga hali ulanmagan bo‘lsa: botni guruh admini qiling, guruhda `/ulash` yuboring. Har bir qatnashchi **Qatnashaman** tugmasini bossin. Avvalgi ro‘yxatdan o‘tish va haftalik jadval ishlashda davom etadi.
 
 **Tahrirlash:** faqat qoralama uchun shu `mock_id` va `version` bilan to‘liq tuzatilgan ZIP/JSON yuboring. Tasdiqlangan versiya o‘zgarmaydi; yangilash uchun `version`ni oshiring. Oldingi natijalar eski versiyaga bog‘langanicha qoladi.

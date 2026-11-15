@@ -94,6 +94,7 @@ module.exports = async function run(rpc, db) {
     ok(await Submission.countDocuments({mock_id:race._id,telegram_id:student})===1,'concurrent submissions keep exactly one participant result');
     await db.exec('set role anon');await assert.rejects(db.query('select public.bio_submit($1,$2,$3::jsonb,$4)',[mid,student,JSON.stringify(key),'a'.repeat(24)]),/permission denied/);await db.exec('reset role');checks.push('anonymous clients cannot call the scoring RPC');
     await require('./import-flow')({msg,cb,owner,student,outsider,g,bot,checks,db,calls});
+    await require('./schedule-flow')(checks);
     return {ok:true,checks};
   } finally {
     await db.exec('reset role');
