@@ -49,6 +49,16 @@ module.exports=async({msg,cb,owner,student,outsider,g,bot,checks,db,calls})=>{
  await Mock.updateOne({_id:m._id},{$set:{ends_at:new Date(Date.now()-1000)}});
  ok((await request('submit',{...body,nonce:next},token)).status===400,'late API submission is refused even with a valid session');
  await msg(owner,'🛠 Admin rejimi');await cb(owner,`cd:${p._id}`);ok((await Package.findById(p._id)).status==='deleted'&&await Submission.countDocuments({mock_id:m._id})===2,'deleting catalogue entry preserves historic runs and results');
+ await msg(owner,C.upload);await msg(owner,null,{document:{file_id:'fixture-import-bundle',file_name:'two-mocks.zip'}});
+ let pick=(await BotSession.findOne({telegram_id:owner})).data;
+ ok(pick.step==='import_pick'&&pick.data.packages.length===2&&!await Package.exists({mock_id:'BIO7-BATCH-A'}),'multi-MOCK ZIP waits for admin selection and persists the choices');
+ const oldToken=pick.data.token;await cb(student,`ci:${oldToken}:0`);
+ ok(!await Package.exists({mock_id:'BIO7-BATCH-A'}),'student cannot use the admin ZIP selection button');
+ await cb(owner,`ci:${oldToken}:0`);pick=(await BotSession.findOne({telegram_id:owner})).data;
+ ok((await Package.findOne({mock_id:'BIO7-BATCH-A'})).status==='draft'&&pick.data.packages.length===1,'selected MOCK is saved as draft and the remaining choice stays available');
+ await cb(owner,`ci:${oldToken}:0`);ok(!await Package.exists({mock_id:'BIO7-BATCH-B'}),'stale ZIP selection cannot import another MOCK');
+ await cb(owner,`ci:${pick.data.token}:0`);
+ ok((await Package.findOne({mock_id:'BIO7-BATCH-B'})).status==='draft'&&!await BotSession.exists({telegram_id:owner}),'both MOCKs import separately from one upload and selection state is cleared');
  for(const role of ['anon','authenticated']){
    await db.exec(`set role ${role}`);await assert.rejects(db.query('select public.bio_begin($1,$2,$3,$4)',[m._id,student,'a'.repeat(24),'b'.repeat(32)]),/permission denied/);await assert.rejects(db.query('select data from public.enzo_documents_store'),/permission denied/);await db.exec('reset role');
  }

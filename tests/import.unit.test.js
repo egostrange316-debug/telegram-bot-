@@ -23,3 +23,39 @@ function signed(user={id:123,first_name:'Ali'},stamp=now/1000){const p=new URLSe
 test('Telegram auth verifies signature, signed ID, age and duplicate parameters',()=>{assert.equal(validateInitData(signed(),token,now).id,123);assert.throws(()=>validateInitData(signed().replace('123%2C','999%2C'),token,now));assert.throws(()=>validateInitData(signed()+'&user={}',token,now));assert.throws(()=>validateInitData(signed(undefined,now/1000-301),token,now));assert.throws(()=>validateInitData(signed(undefined,now/1000+100),token,now));assert.throws(()=>validateInitData(signed({id:'123'}),token,now));});
 test('server sessions reject tampering, wrong token and expiration',()=>{const session=issueSession({id:123},token,now);assert.equal(verifySession(session,token,now).id,123);assert.throws(()=>verifySession(session+'X',token,now));assert.throws(()=>verifySession(session,'other',now));assert.throws(()=>verifySession(session,token,now+6*3600_000));});
 module.exports={sample};
+const legacy=(code)=>{const d=sample();return {mock:{mock_id:code,questions:d.mock.questions.map(q=>({id:q.question_id,topic:50,question:q.text,options:q.options}))},key:{mock_id:code,answers:d.answer_key.answers}};};
+const zipBundle=(pairs)=>zipSync(Object.fromEntries(pairs.flatMap(([prefix,d])=>[[`${prefix}_mock.json`,strToU8(JSON.stringify(d.mock))],[`${prefix}_answers.json`,strToU8(JSON.stringify(d.key))],[`${prefix}.html`,strToU8('<script>throw Error("untrusted")</script>')]])));
+test('original two-MOCK six-file ChatGPT ZIP imports both tests without changing keys',()=>{
+ const data=importFile(zipBundle([['BIO7_MOCK_01',legacy('BIO7-50-59-M1')],['BIO7_MOCK_02',legacy('BIO7-50-59-M2')]]),'combined.zip');
+ assert.deepEqual(data.packages.map(p=>p.mock_id),['BIO7-50-59-M1','BIO7-50-59-M2']);
+ for(const p of data.packages){assert.equal(p.grade,7);assert.equal(p.version,1);assert.equal(p.question_count,30);assert.equal(p.questions[0].text,'Savol 1');assert.equal(p.questions[0].question_id,'Q001');assert.deepEqual(p.answer_key,Array(30).fill('B'));assert.ok(p.import_notes.some(n=>n.includes('Kitob')));assert.ok(!JSON.stringify(p).includes('untrusted'));}
+});
+test('safe wrapper folders and optional README do not count as extra mocks',()=>{
+ const d=sample(),b=zipSync({'wrapper/':new Uint8Array(),'wrapper/mock.json':strToU8(JSON.stringify(d.mock)),'wrapper/answers.json':strToU8(JSON.stringify(d.answer_key)),'wrapper/index.html':strToU8('<script>danger()</script>'),'wrapper/README.md':strToU8('Untrusted README')});
+ assert.equal(importFile(b,'wrapper.zip').mock_id,d.mock.mock_id);
+});
+test('two folder packages with canonical filenames match keys by mock ID and version',()=>{
+ const a=sample(),b=sample();b.mock.mock_id='BIO7-SECOND';b.answer_key.mock_id=b.mock.mock_id;b.answer_key.answers.Q001='D';
+ const data=importFile(zipSync({'a/mock.json':strToU8(JSON.stringify(a.mock)),'b/answers.json':strToU8(JSON.stringify(a.answer_key)),'b/mock.json':strToU8(JSON.stringify(b.mock)),'a/answers.json':strToU8(JSON.stringify(b.answer_key))}),'two.zip');
+ assert.deepEqual(data.packages.map(p=>p.answer_key[0]),['B','D']);
+});
+test('multi-MOCK archives reject invalid second test, duplicate identities, unmatched and ambiguous keys',()=>{
+ const a=legacy('BIO7-A'),b=legacy('BIO7-B');delete b.key.answers.Q010;
+ assert.throws(()=>importFile(zipBundle([['first',a],['second',b]]),'x.zip'),/second_mock.json: Q010/);
+ assert.throws(()=>importFile(zipBundle([['first',a],['second',a]]),'x.zip'),/takrorlangan/);
+ const d=sample();const files={'mock.json':strToU8(JSON.stringify(d.mock)),'answers.json':strToU8(JSON.stringify(d.answer_key))};
+ assert.throws(()=>importFile(zipSync({...files,'extra_answers.json':strToU8(JSON.stringify({...d.answer_key,mock_id:'OTHER'}))}),'x.zip'),/tegishli MOCK/);
+ assert.throws(()=>importFile(zipSync({...files,'extra_answers.json':strToU8(JSON.stringify(d.answer_key))}),'x.zip'),/takrorlangan/);
+});
+test('legacy adaptation never guesses missing answers, unknown grades or a newer key version',()=>{
+ const a=legacy('BIO7-A');a.mock.version=2;
+ assert.throws(()=>importFile(zipBundle([['first',a]]),'x.zip'),/kaliti/);
+ const b=legacy('UNKNOWN');assert.throws(()=>importFile(zipBundle([['first',b]]),'x.zip'),/version/);
+ const c=legacy('BIO7-C');delete c.key.answers.Q001;assert.throws(()=>importFile(zipBundle([['first',c]]),'x.zip'),/Q001/);
+});
+test('folder support still rejects traversal, absolute/Windows paths, duplicate names and excessive entries',()=>{
+ const d=sample(),base={'mock.json':strToU8(JSON.stringify(d.mock)),'answers.json':strToU8(JSON.stringify(d.answer_key))};
+ for(const name of ['folder/../index.html','/folder/index.html','folder\\index.html','C:/index.html','./index.html','folder//index.html'])assert.throws(()=>importFile(zipSync({...base,[name]:strToU8('x')}),'x.zip'),/xavfli/);
+ assert.throws(()=>importFile(zipSync({...base,'MOCK.JSON':base['mock.json']}),'x.zip'),/takrorlangan/);
+ const dirs=Object.fromEntries(Array.from({length:39},(_,i)=>[`folder${i}/`,new Uint8Array()]));assert.throws(()=>importFile(zipSync({...base,...dirs}),'x.zip'),/eng ko‘pi 40/);
+});

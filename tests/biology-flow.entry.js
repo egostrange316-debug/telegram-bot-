@@ -12,7 +12,10 @@ module.exports = async function run(rpc, db) {
   const checks=[],calls=[]; let seq=1, reads=0, failGroup=false, failResult=false;
   const ok=(value,label)=>{ assert.ok(value,label); checks.push(label); };
   const key=Array.from({length:50},(_,i)=>'ABCD'[i%4]);
-  const bot=createBot({downloadImport:async()=>require('../src/biology/importer').validatePackage(require('../examples/mock-30/import.json').mock,require('../examples/mock-30/import.json').answer_key),readSheet:async()=>{reads++;return [...key];}});
+  const bot=createBot({downloadImport:async(_api,document)=>{
+    const one=require('../src/biology/importer').validatePackage(require('../examples/mock-30/import.json').mock,require('../examples/mock-30/import.json').answer_key);
+    return document.file_id==='fixture-import-bundle' ? {packages:[{...one,mock_id:'BIO7-BATCH-A'},{...one,mock_id:'BIO7-BATCH-B'}]} : one;
+  },readSheet:async()=>{reads++;return [...key];}});
   bot.botInfo={id:123456789,is_bot:true,first_name:'Fixture',username:config.BOT_USERNAME};
   bot.api.config.use(async(_prev,method,payload)=>{
     calls.push({method,payload});

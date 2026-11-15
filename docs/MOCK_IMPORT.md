@@ -3,7 +3,7 @@
 ## Admin uchun
 
 1. @Enzo_material_bot → `/menu` → **🛠 Admin rejimi**.
-2. **📥 MOCK yuklash** → ZIP yoki yagona JSON yuboring (2 MB gacha).
+2. **📥 MOCK yuklash** → ZIP yoki yagona JSON yuboring (2 MB gacha). ZIPda bir nechta MOCK bo‘lsa, tugmalardan keraklisini tanlang. Saqlagach qolganlarini ham shu yuklashdan tanlash mumkin.
 3. Bot har bir savolni va kalitni tekshiradi. Xato bo‘lsa savol IDsi bilan yozadi.
 4. **📚 Barcha MOCKlar** → mock → **👁 Savollarni ko‘rish**, **🔑 Kalit**.
 5. **✅ Qoralamani tasdiqlash**. Tasdiqlanmagan qoralama guruhga chiqmaydi.
@@ -21,13 +21,24 @@ Bot guruhga hali ulanmagan bo‘lsa: botni guruh admini qiling, guruhda `/ulash`
 
 ## ZIP formati
 
-Arxiv ildizida faqat quyidagi fayllar bo‘lsin; papka, boshqa fayl yoki ichki ZIP bo‘lmasin:
+Bitta MOCK uchun quyidagi fayllar bo‘lsin. Ular arxiv ildizida yoki oddiy papka ichida bo‘lishi mumkin:
 
 - `mock.json` — majburiy: metadata va savollar.
 - `answers.json` — majburiy: server uchun javoblar kaliti.
 - `index.html` — ixtiyoriy: importda bajarilmaydi va o‘quvchiga tarqatilmaydi.
 
-ZIP 2 MB, har bir ochilgan fayl 1 MB, jami ochilgan ma’lumot 2 MB gacha. Shifrlangan, ko‘p qismli, ZIP64, symlink va xavfli yo‘lli arxivlar rad etiladi. Saqlashdan oldin UTF-8, CRC, hajm va JSON tekshiriladi.
+Bir ZIPda 10 tagacha MOCK mumkin. `NOM_mock.json` + `NOM_answers.json` nomlari ham taniladi; har bir testning HTML fayli ixtiyoriy. Savol va kalit fayllari nomiga emas, `mock_id` va `version`ga qarab bog‘lanadi. `README`, `README.txt` yoki `README.md` bo‘lsa e’tiborga olinmaydi. Ichki ZIP, bajariladigan kod fayllari, symlink va xavfli yo‘llar qabul qilinmaydi.
+
+Masalan, oldingi ChatGPT arxivi shu holicha yuklanadi:
+
+- `BIO7_MOCK_01_mock.json`, `BIO7_MOCK_01_answers.json`, `BIO7_MOCK_01.html`
+- `BIO7_MOCK_02_mock.json`, `BIO7_MOCK_02_answers.json`, `BIO7_MOCK_02.html`
+
+Bot avval barcha savol va kalitlarni tekshiradi, so‘ng **qaysi MOCKni saqlash** tugmalarini chiqaradi. Hech biri avtomatik tasdiqlanmaydi. Birinchi MOCK saqlangach ikkinchisini ham tanlang. Import tugmasini qayta bosish yoki `/cancel` qolgan tanlovni bekor qiladi; saqlangan qoralama o‘chmaydi.
+
+Eski `BIO7-...` formatidagi `id/topic/question` maydonlari `question_id/source_topic/text`ga moslashtiriladi. Yetishmagan versiya 1, sinf `BIO7` kodidan 7, savollar soni ro‘yxatdan olinadi. Kitob savol raqami berilmagan bo‘lsa MOCK ichidagi tartib raqami qo‘yiladi; bu haqda qoralama kartasida yoziladi. Javoblar faqat mos JSON kalitidan olinadi; HTMLdan kalit chiqarilmaydi, yetishmagan javob taxmin qilinmaydi. Yangi standart format qat’iy tekshirilishda davom etadi.
+
+ZIP 2 MB, 40 tagacha fayl/papka yozuvi; har bir ochilgan fayl 1 MB, jami ochilgan ma’lumot 2 MB gacha. Shifrlangan, ko‘p qismli, ZIP64, symlink va xavfli yo‘lli arxivlar rad etiladi. Saqlashdan oldin UTF-8, CRC, hajm va JSON tekshiriladi.
 
 `examples/mock-30/mock-30.zip` — to‘liq ishlaydigan **format namunasi**, haqiqiy biologiya testi emas.
 

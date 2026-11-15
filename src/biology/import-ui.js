@@ -21,10 +21,25 @@ async function card(ctx,p) {
   const kb=new InlineKeyboard().text('👁 Savollarni ko‘rish',`cq:${p._id}:0`).row().text('🔑 Kalit',`cp:key:${p._id}`).row();
   if(p.status==='draft')kb.text('✅ Qoralamani tasdiqlash',`ca:${p._id}`).row().text('📝 Tahrirlash',`cp:edit:${p._id}`);
   else kb.text('📤 Guruhga yuborish',`cp:send:${p._id}`);
-  return ctx.reply(`${p.title}\n${p.mock_id} · v${p.version}\n${p.grade}-sinf · ${p.question_count} savol\nMavzular: ${p.topics.join(', ')}\nHolat: ${p.status==='draft'?'Qoralama — hali o‘quvchilarga ochilmagan':'Tasdiqlangan'}\n\nSavollar va kalitni ko‘rib, tasdiqlang. HTML xavfsiz test oynasida avtomatik tuziladi.`,{reply_markup:kb});
+  return ctx.reply(`${p.title}\n${p.mock_id} · v${p.version}\n${p.grade}-sinf · ${p.question_count} savol\nMavzular: ${p.topics.join(', ')}\nHolat: ${p.status==='draft'?'Qoralama — hali o‘quvchilarga ochilmagan':'Tasdiqlangan'}\n${p.import_notes?.length ? '\n'+p.import_notes.join('\n')+'\n' : ''}\nSavollar va kalitni ko‘rib, tasdiqlang. HTML xavfsiz test oynasida avtomatik tuziladi.`,{reply_markup:kb});
+}
+async function choosePackage(ctx,packages,editId) {
+  const token=randomBytes(4).toString('hex');
+  setSession(ctx.from.id,{step:'import_pick',data:{packages,edit_id:editId,token}});
+  const kb=new InlineKeyboard();
+  packages.forEach((p,i)=>kb.text(`${p.mock_id} v${p.version} · ${p.question_count} savol`,`ci:${token}:${i}`).row());
+  return ctx.reply(`ZIPda ${packages.length} ta MOCK qoldi. Qaysi birini qoralamaga saqlaymiz? Barchasining savollari va kalitlari tekshirildi.`,{reply_markup:kb});
 }
 function registerImportUI(bot,{admin,showGroups,menu,download=downloadImport}) {
-  bot.hears(C.upload,async ctx=>{await admin(ctx);setSession(ctx.from.id,{step:'import_file',data:{}});return ctx.reply('ZIP: mock.json + answers.json (+ index.html ixtiyoriy).\nYoki bitta JSON: {"mock": {...}, "answer_key": {...}}.\n2 MB gacha; 30 yoki 50 savol. /cancel — bekor qilish.');});
+  bot.hears(C.upload,async ctx=>{await admin(ctx);setSession(ctx.from.id,{step:'import_file',data:{}});return ctx.reply('ZIP: mock.json + answers.json yoki NOM_mock.json + NOM_answers.json. Bitta ZIPda bir nechta MOCK bo‘lishi mumkin — tanlash tugmalari chiqadi.\nYoki bitta JSON: {"mock": {...}, "answer_key": {...}}.\n2 MB gacha; har bir MOCK 30 yoki 50 savol. /cancel — bekor qilish.');});
+  bot.callbackQuery(/^ci:([a-f\d]{8}):(\d)$/,async ctx=>{
+    await admin(ctx);const s=getSession(ctx.from.id),i=Number(ctx.match[2]);
+    if(s?.step!=='import_pick'||s.data.token!==ctx.match[1]||!s.data.packages[i])throw new InputError('Bu ZIP tanlovi eskirgan. Faylni qayta yuboring.');
+    const p=await catalog.savePackage(s.data.packages[i],s.data.edit_id);
+    const remaining=s.data.packages.filter((_,index)=>index!==i);
+    clearSession(ctx.from.id);await ctx.answerCallbackQuery();await menu(ctx,'✅ Tanlangan MOCK qoralamaga saqlandi.');await card(ctx,p);
+    if(remaining.length&&!s.data.edit_id)return choosePackage(ctx,remaining);
+  });
   for(const [name,action] of [['all','view'],['edit','edit'],['remove','remove'],['send','send'],['key','key']])bot.hears(C[name],async ctx=>{await admin(ctx);clearSession(ctx.from.id);return list(ctx,action);});
   bot.callbackQuery(/^cl:(view|edit|remove|send|key):(\d{1,2})$/,async ctx=>{await admin(ctx);await ctx.answerCallbackQuery();return list(ctx,ctx.match[1],Number(ctx.match[2]));});
   bot.callbackQuery(/^cp:(view|edit|remove|send|key):([a-f\d]{24})$/,async ctx=>{
@@ -63,9 +78,12 @@ function registerImportUI(bot,{admin,showGroups,menu,download=downloadImport}) {
   bot.use(async(ctx,next)=>{
     const s=getSession(ctx.from.id);if(!ctx.message || !s?.step?.startsWith('import_'))return next();await admin(ctx);
     if(s.step==='import_file'){
-      const p=await catalog.savePackage(await download(ctx.api,ctx.message.document,config.BOT_TOKEN),s.data.edit_id);
+      const imported=await download(ctx.api,ctx.message.document,config.BOT_TOKEN);
+      if(imported.packages)return choosePackage(ctx,imported.packages,s.data.edit_id);
+      const p=await catalog.savePackage(imported,s.data.edit_id);
       clearSession(ctx.from.id);await menu(ctx,'✅ MOCK tekshirildi va qoralamaga saqlandi.');return card(ctx,p);
     }
+    if(s.step==='import_pick')return ctx.reply('Yuqoridagi MOCK tugmasini tanlang. Boshqa fayl uchun «📥 MOCK yuklash» yoki /cancel bosing.');
     if(s.step==='import_retake'){
       const text=s.data.code?`${s.data.code} ${ctx.message.text}`:ctx.message.text;
       const match=/^([a-f\d]{6}) (\d{1,16})$/.exec(text||'');if(!match||!Number.isSafeInteger(+match[2]))throw new InputError('Format: abc123 123456789');

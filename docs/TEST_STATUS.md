@@ -1,3 +1,14 @@
+# Umumiy ZIP importi tuzatildi — 2026-11-15
+
+- Sabab: parser faqat 2–3 ta yozuvli ZIPni qabul qilgan; oldingi ChatGPT arxivida ikki MOCK uchun 6 ta fayl bor edi. Asl arxiv bilan aynan foydalanuvchi aytgan xato qayta hosil qilindi.
+- Endi 10 tagacha MOCK / 40 ta fayl-papka yozuvi, xavfsiz papkalar va `NOM_mock.json`/`NOM_answers.json` formatlari taniladi. Kalitlar MOCK ID/versiya bo‘yicha bog‘lanadi.
+- Eski BIO7 JSON sxemasi moslashtiriladi, javoblar o‘zgarmaydi, taxminiy metadata haqida adminga ko‘rsatiladi. HTML bajarilmaydi.
+- `npm run test:unit`: 77 PASS; `npm run test:biology`: 57 PASS. Asl 6 faylli ZIP va ikkita avvalgi alohida import ZIP ham haqiqiy fayl baytlari bilan tekshirildi.
+- Bir ZIPdan ikki MOCKni tanlab saqlash, admin ruxsati, eskirgan tugma, yetishmagan/takrorlangan kalit va xavfli yo‘llar tekshirildi.
+- Bazaga o‘zgartirish kerak emas; `enzo-bot` Edge Function bundle yangilanadi.
+
+---
+
 # MOCK import va Mini App — 2026-11-15
 
 - `npm run test:unit`: 71 test PASS.

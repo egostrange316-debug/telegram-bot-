@@ -1,6 +1,6 @@
 const { Inflate } = require('fflate');
 const { InputError } = require('./domain');
-const MAX_FILE = 2 * 1024 * 1024, MAX_ENTRY = 1024 * 1024;
+const MAX_FILE = 2 * 1024 * 1024, MAX_ENTRY = 1024 * 1024, MAX_ZIP_ENTRIES = 40, MAX_MOCKS = 10;
 const fail = message => { throw new InputError(message); };
 const object = x => x && typeof x === 'object' && !Array.isArray(x);
 function str(x, name, max) {
@@ -81,6 +81,14 @@ function crc32(bytes) {
   for (const b of bytes) { c ^= b; for (let i = 0; i < 8; i++) c = c >>> 1 ^ (c & 1 ? 0xedb88320 : 0); }
   return (c ^ 0xffffffff) >>> 0;
 }
+function zipPath(name) {
+  if (!name || name.length > 240 || /[\\\x00-\x1f\x7f:]/.test(name) || name.startsWith('/')) fail('ZIP: xavfli fayl yo‘li.');
+  const directory = name.endsWith('/'), parts = (directory ? name.slice(0,-1) : name).split('/');
+  if (parts.some(p => !p || p === '.' || p === '..')) fail('ZIP: xavfli fayl yo‘li.');
+  const base = parts.at(-1);
+  if (!directory && !/^(?:mock\.json|answers\.json|.+_(?:mock|answers)\.json|[^.].*\.html|README(?:\.(?:txt|md))?)$/i.test(base)) fail(`ZIP: qo‘llanmaydigan fayl: ${name.slice(0,80)}`);
+  return directory;
+}
 function unzip(bytes) {
   if (bytes.length > MAX_FILE || bytes.length < 22) fail('ZIP hajmi noto‘g‘ri (eng ko‘pi 2 MB).');
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), u16 = p => view.getUint16(p, true), u32 = p => view.getUint32(p, true);
@@ -90,15 +98,19 @@ function unzip(bytes) {
     while (end >= Math.max(0, bytes.length - 65557) && u32(end) !== 0x06054b50) end--;
     if (end < 0 || u32(end) !== 0x06054b50 || end + 22 + u16(end + 20) !== bytes.length) fail('ZIP yakuni buzilgan.');
     const count = u16(end + 10), size = u32(end + 12), offset = u32(end + 16);
-    if (u16(end+4) || u16(end+6) || count !== u16(end+8) || count < 2 || count > 3 || offset + size !== end) fail('ZIP: 2–3 ta fayl, oddiy bir qismli arxiv kerak.');
-    let p = offset, total = 0; const files = Object.create(null), ranges = [];
+    if (u16(end+4) || u16(end+6) || count !== u16(end+8) || offset === 0xffffffff || size === 0xffffffff || offset + size !== end) fail('ZIP: buzilgan, ko‘p qismli yoki ZIP64 arxiv qo‘llanmaydi.');
+    if (!count || count > MAX_ZIP_ENTRIES) fail(`ZIP: eng ko‘pi ${MAX_ZIP_ENTRIES} ta fayl/papka yozuvi mumkin.`);
+    let p = offset, total = 0; const files = Object.create(null), ranges = [], names = new Set();
     for (let i = 0; i < count; i++) {
       if (u32(p) !== 0x02014b50) fail('ZIP katalogi buzilgan.');
       const flags = u16(p+8), method = u16(p+10), crc = u32(p+16), compressed = u32(p+20), length = u32(p+24);
       const nl = u16(p+28), ex = u16(p+30), comment = u16(p+32), local = u32(p+42), mode = u32(p+38) >>> 16;
       const name = decode(bytes.subarray(p+46, p+46+nl));
-      if (!['mock.json','answers.json','index.html'].includes(name) || files[name]) fail(`ZIP: noma’lum/takrorlangan yoki xavfli yo‘l: ${name.slice(0,80)}`);
-      if (flags & ~0x808 || ![0,8].includes(method) || (mode & 0xf000) === 0xa000 || u16(p+34)) fail(`${name}: shifrlangan/link yoki qo‘llanmaydigan ZIP formati.`);
+      const directory = zipPath(name);
+      if (names.has(name.toLowerCase())) fail(`ZIP: takrorlangan yo‘l: ${name.slice(0,80)}`);
+      names.add(name.toLowerCase());
+      if (flags & ~0x808 || ![0,8].includes(method) || ![0,0x8000,0x4000].includes(mode & 0xf000) || ((mode & 0xf000) === 0x4000 && !directory) || u16(p+34)) fail(`${name}: shifrlangan/link yoki qo‘llanmaydigan ZIP formati.`);
+      if (directory && length) fail(`${name}: papka yozuvi bo‘sh bo‘lishi kerak.`);
       total += length;
       if (length > MAX_ENTRY || total > MAX_FILE || compressed > MAX_FILE) fail(`${name}: ochilgan hajmi limitdan katta.`);
       if (u32(local) !== 0x04034b50 || u16(local+6) !== flags || u16(local+8) !== method) fail(`${name}: ZIP sarlavhasi mos emas.`);
@@ -115,18 +127,73 @@ function unzip(bytes) {
         output = new Uint8Array(written); let at = 0; for (const chunk of chunks) { output.set(chunk,at); at += chunk.length; }
       }
       if (output.length !== length || crc32(output) !== crc) fail(`${name}: ZIP hajmi yoki CRC noto‘g‘ri.`);
-      files[name] = decode(output); p += 46 + nl + ex + comment;
+      if (!directory) files[name] = decode(output);
+      p += 46 + nl + ex + comment;
     }
-    if (p !== end || !files['mock.json'] || !files['answers.json']) fail('ZIP ichida mock.json va answers.json bo‘lishi shart.');
+    if (p !== end) fail('ZIP katalogi uzunligi mos emas.');
     return files;
   } catch (e) { if (e instanceof InputError) throw e; fail('ZIP buzilgan yoki ochib bo‘lmadi.'); }
+}
+// Earlier ChatGPT exports used id/topic/question and omitted metadata. Only
+// recognize that explicit BIO<grade>-... legacy schema; never derive a key
+// from HTML or guess an answer. All adapted records still pass the strict validator.
+function legacyMock(mock) {
+  return object(mock) && /^BIO(?:[1-9]|1[0-2])-/.test(mock.mock_id || '') && Array.isArray(mock.questions) && mock.questions.length > 0 &&
+    mock.questions.every(q => object(q) && typeof q.id === 'string' && !Object.hasOwn(q,'question_id') && typeof q.question === 'string');
+}
+function normalizePair(mock, key) {
+  if (!legacyMock(mock)) return validatePackage(mock,key);
+  const inferred = [];
+  const version = mock.version === undefined ? 1 : mock.version;
+  if (mock.version === undefined) inferred.push('Versiya: 1.');
+  const grade = mock.grade === undefined ? Number(/^BIO(\d+)-/.exec(mock.mock_id)[1]) : mock.grade;
+  if (mock.grade === undefined) inferred.push(`Sinf MOCK kodidan olindi: ${grade}.`);
+  const questions = mock.questions.map((q,i) => {
+    const number = q.source_question_number ?? q.number;
+    if (number === undefined && !inferred.includes('Kitob savol raqamlari berilmagan: MOCK ichidagi tartib raqamlari ishlatildi.')) inferred.push('Kitob savol raqamlari berilmagan: MOCK ichidagi tartib raqamlari ishlatildi.');
+    return { question_id:q.id, source_topic:typeof q.topic === 'number' ? String(q.topic) : q.topic,
+      source_question_number:number === undefined ? i+1 : number, text:q.question, options:q.options };
+  });
+  const normalized = validatePackage({...mock,version,grade,title:mock.title === undefined ? `Biologiya MOCK · ${mock.mock_id}` : mock.title,
+    question_count:mock.question_count === undefined ? questions.length : mock.question_count,
+    topics:mock.topics === undefined ? [...new Set(questions.map(q=>q.source_topic))] : mock.topics, questions},
+    {...key,version:key.version === undefined ? 1 : key.version});
+  return {...normalized, import_notes:['Eski ChatGPT formati moslashtirildi.',...inferred]};
+}
+function packagesFromZip(files) {
+  const mocks=[], keys=[];
+  for (const [name,text] of Object.entries(files)) {
+    const base=name.split('/').at(-1);
+    if (/^(?:mock|.+_mock)\.json$/i.test(base)) mocks.push({name,data:parseJSON(text,name)});
+    else if (/^(?:answers|.+_answers)\.json$/i.test(base)) keys.push({name,data:parseJSON(text,name)});
+  }
+  if (!mocks.length || !keys.length) fail('ZIPda mock.json + answers.json yoki NOM_mock.json + NOM_answers.json kerak. HTMLning o‘zi yetmaydi.');
+  if (mocks.length > MAX_MOCKS) fail(`Bitta ZIPda eng ko‘pi ${MAX_MOCKS} ta MOCK mumkin.`);
+  const used=new Set(), identities=new Set();
+  const packages=mocks.map(({name,data:mock})=>{
+    if (!object(mock)) fail(`${name}: test JSON obyekti bo‘lishi kerak.`);
+    const legacy=legacyMock(mock), version=legacy && mock.version===undefined ? 1 : mock.version;
+    const identity=`${mock.mock_id}:${version}`;
+    if (identities.has(identity)) fail(`${name}: takrorlangan MOCK ID/versiya: ${identity}`);
+    identities.add(identity);
+    const matching=keys.filter(({data:k})=>object(k) && k.mock_id===mock.mock_id && (legacy && k.version===undefined ? 1 : k.version)===version);
+    if (matching.length!==1) fail(`${name}: ${mock.mock_id} v${version} uchun ${matching.length ? 'takrorlangan' : 'mos'} javob kaliti ${matching.length ? 'topildi' : 'topilmadi'}.`);
+    if (used.has(matching[0].name)) fail(`${name}: bitta kalit bir nechta MOCKka mos keldi.`);
+    used.add(matching[0].name);
+    try { return normalizePair(mock,matching[0].data); }
+    catch(e) { if (e instanceof InputError) fail(`${name}: ${e.message}`); throw e; }
+  });
+  for(const key of keys) if(!used.has(key.name)) fail(`${key.name}: tegishli MOCK topilmadi.`);
+  return packages;
 }
 function importFile(bytes, filename) {
   if (bytes.length > MAX_FILE) fail('Fayl 2 MB dan katta.');
   if (/\.zip$/i.test(filename)) {
     const files = unzip(bytes);
-    // index.html is intentionally never executed, served, or persisted. It may contain a key.
-    return validatePackage(parseJSON(files['mock.json'],'mock.json'),parseJSON(files['answers.json'],'answers.json'));
+    // HTML is never executed, served, or persisted. Every package is validated
+    // before the admin can select one; no partly-valid archive reaches storage.
+    const packages=packagesFromZip(files);
+    return packages.length===1 ? packages[0] : {packages};
   }
   if (!/\.json$/i.test(filename)) fail('Faqat ZIP yoki JSON yuboring.');
   let text; try { text = new TextDecoder('utf-8',{fatal:true}).decode(bytes); } catch { fail('UTF-8 fayl yuboring.'); }
