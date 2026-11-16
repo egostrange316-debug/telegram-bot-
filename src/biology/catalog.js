@@ -1,5 +1,5 @@
 const { randomBytes } = require('crypto');
-const { BioPackage: Package, BioMock: Mock, BioGroup: Group, BioAttempt: Attempt, BioSubmission: Submission } = require('../storage/postgres');
+const { BioPackage: Package, BioMock: Mock, BioGroup: Group, BioAttempt: Attempt, BioSubmission: Submission, deleteBiologyPackage } = require('../storage/postgres');
 const { InputError, localTime } = require('./domain');
 const service = require('./service');
 async function savePackage(data, editId) {
@@ -11,6 +11,11 @@ async function savePackage(data, editId) {
   if (existing) throw new InputError(`${data.mock_id} v${data.version} allaqachon bor. Yangi version kiriting yoki qoralamani «Tahrirlash» orqali yangilang.`);
   try { return await Package.create(data); }
   catch(e) { if(e.code===11000) throw new InputError('Bu MOCK ID va versiya allaqachon bor.'); throw e; }
+}
+async function deletePackage(packageId) {
+  const result=await deleteBiologyPackage({p_package_id:packageId});
+  if(!result.ok)throw new InputError('MOCK topilmadi.');
+  return result;
 }
 function publicMock(m) {
   return { run_id:m._id, mock_id:m.external_mock_id, version:m.version, title:m.title, grade:m.grade, topics:m.topics,
@@ -63,4 +68,4 @@ function snapshot(p) {
   return { package_id:p._id,external_mock_id:p.mock_id,version:p.version,title:p.title,count:p.question_count,questions:p.questions,
     question_ids:p.questions.map(q=>q.question_id),grade:p.grade,topics:p.topics,answer_key:p.answer_key,materials:[] };
 }
-module.exports={savePackage,publicMock,openForUser,permitRetake,snapshot,reviewReady,reviewForUser};
+module.exports={savePackage,publicMock,openForUser,permitRetake,snapshot,reviewReady,reviewForUser,deletePackage};

@@ -1,9 +1,9 @@
 const { randomBytes } = require('crypto');
 const config = require('../config');
-const { BioProfile: Profile, BioGroup: Group, BioMock: Mock, BioSubmission: Submission, JobLog, submitBiology, beginBiology } = require('../storage/postgres');
+const { BioProfile: Profile, BioGroup: Group, BioMock: Mock, BioSubmission: Submission, BioPackage: Package, JobLog, submitBiology, beginBiology } = require('../storage/postgres');
 const { deliverOnce, sendReport } = require('../lib/delivery');
 const { sendMaterial } = require('../bot/common');
-const { InputError, esc, answerText, localTime, latestSlot, weekStart, rank, isMember, DAY } = require('./domain');
+const { InputError, esc, answerText, localTime, latestSlot, weekStart, dayStart, rank, isMember, DAY } = require('./domain');
 const START_REMINDER_MS = 10 * 60_000;
 const ownerId = () => config.ADMIN_IDS[0];
 const isOwner = id => Number.isSafeInteger(id) && id === ownerId();
@@ -61,21 +61,39 @@ async function openMock(api, group, mock, now) {
   })) return;
   await Mock.updateOne({ _id: mock._id, status: 'opening' }, { $set: { status: 'open' } });
 }
-async function weeklyRows(groupId, date) {
-  const start = weekStart(date), end = new Date(start.getTime() + 7 * DAY);
-  const mocks = await Mock.find({ group_id: groupId, status: 'closed', ends_at: { $gte: start, $lt: end } });
-  const rows = await Submission.find({ mock_id: { $in: mocks.map(m => m._id) } });
+async function periodRows(groupId, start, end, asOf = new Date()) {
+  const mocks = await Mock.find({ group_id: groupId, status: 'closed', ends_at: { $gte: start, $lt: end, $lte: asOf } });
+  const packages = await Package.find({ _id: { $in: mocks.map(m=>m.package_id).filter(Boolean) }, status: { $ne: 'deleted' } });
+  const valid = new Set(packages.map(p=>p._id));
+  const ids = mocks.filter(m=>!m.package_id || valid.has(m.package_id)).map(m=>m._id);
+  const rows = await Submission.find({ mock_id: { $in: ids } });
   const sums = new Map();
   for (const row of rows) {
     const sum = sums.get(row.telegram_id) || { name: row.name, correct: 0, total: 0, tests: 0 };
     sum.correct += row.correct; sum.total += row.total; sum.tests++; sums.set(row.telegram_id, sum);
   }
-  return { start, rows: rank([...sums.values()]) };
+  return { start, end, rows: rank([...sums.values()]) };
 }
-async function weeklyText(groupId, date) {
-  const { start, rows } = await weeklyRows(groupId, date);
-  return `🏆 <b>Haftalik reyting — ${localTime(start).slice(0, 10)}</b>\nTo‘g‘ri javoblar yig‘indisi; teng ball — teng o‘rin.\n\n` +
-    (rows.map(r => `${r.place}. ${esc(r.name)} — <b>${r.correct}/${r.total}</b> · ${r.tests} mock`).join('\n') || 'Hali yakunlangan natija yo‘q.');
+const rankingLines = rows => rows.map(r => `${r.place}. ${esc(r.name)} — <b>${r.correct}/${r.total}</b> · ${r.tests} mock`).join('\n') || 'Hali yakunlangan natija yo‘q.';
+async function dailyText(groupId, date, asOf = new Date()) {
+  const start=dayStart(date),end=new Date(start.getTime()+DAY);
+  const {rows}=await periodRows(groupId,start,end,asOf);
+  return `📊 <b>Kunlik reyting — ${localTime(start).slice(0,10)}</b>\nFaqat shu kuni yakunlangan MOCKlar. Teng ball — teng o‘rin.\n\n`+rankingLines(rows);
+}
+async function weeklyText(groupId, date, asOf = new Date()) {
+  const start=weekStart(date),end=new Date(start.getTime()+7*DAY);
+  const {rows}=await periodRows(groupId,start,end,asOf);
+  return `🏆 <b>Haftalik yakun — ${localTime(start).slice(0,10)} — ${localTime(new Date(end-1)).slice(0,10)}</b>\nHafta davomida yakunlangan MOCKlar yig‘indisi. Teng ball — teng o‘rin.\n\n`+rankingLines(rows);
+}
+async function publishWeekly(api,group,now) {
+  // The previous full Monday–Sunday period ends at Monday 00:00 Tashkent.
+  const end=weekStart(now),start=new Date(end.getTime()-7*DAY);
+  const key=`bio:week-final:${group._id}:${start.toISOString()}`;
+  if(await JobLog.findOne({key:`${key}:complete`,state:'done'}))return;
+  const {rows}=await periodRows(group._id,start,end,now);
+  if(!rows.length)return;
+  const text=await weeklyText(group._id,start,now);
+  if(await sendReport(api,group.chat_id,text,key))await delivered(`${key}:complete`,async()=>{});
 }
 async function resultsText(mock) {
   const submissions = await Submission.find({ mock_id: mock._id });
@@ -95,14 +113,19 @@ async function closeMock(api, group, mock, now) {
     mock = await Mock.findOneAndUpdate({ _id: mock._id, status: 'open', ends_at: { $lte: now } }, { $set: { status: 'closed', closed_at: now } }, { new: true });
     if (!mock) return;
   }
-  if (!mock.report_text) {
-    const report_text = await resultsText(mock), weekly_text = await weeklyText(group._id, new Date(mock.ends_at));
-    mock = await Mock.findOneAndUpdate({ _id: mock._id, status: 'closed', report_text: { $exists: false } }, { $set: { report_text, weekly_text } }, { new: true }) || await Mock.findById(mock._id);
+  mock=await Mock.findById(mock._id);
+  if(!mock || mock.status!=='closed' || new Date(mock.ends_at)>now)return;
+  if (!mock.report_text || !mock.daily_text) {
+    const report_text = await resultsText(mock), daily_text = await dailyText(group._id, new Date(mock.ends_at),now);
+    mock = await Mock.findOneAndUpdate({ _id: mock._id, status: 'closed' }, { $set: { report_text, daily_text }, $unset:{weekly_text:1} }, { new: true });
+    if(!mock)return;
   }
   if (!await sendReport(api, group.chat_id, mock.report_text, `bio:result:${mock._id}`)) return;
-  if (!await sendReport(api, group.chat_id, mock.weekly_text, `bio:weekly:${mock._id}`)) return;
-  await Mock.updateOne({ _id: mock._id }, { $set: { reported: true } });
+  if((await Mock.findById(mock._id))?.status!=='closed')return;
+  if (!await sendReport(api, group.chat_id, mock.daily_text, `bio:daily:${mock._id}`)) return;
+  await Mock.updateOne({ _id: mock._id, status:'closed' }, { $set: { reported: true } });
 }
+
 async function tick(api, now = new Date()) {
   const groups = await Group.find({ enabled: true });
   for (const group of groups) {
@@ -135,6 +158,7 @@ async function tick(api, now = new Date()) {
           } else await openMock(api, group, mock, now);
         }
         mock = await Mock.findById(mock._id);
+        if (!mock || mock.status==='deleted') continue;
         if (mock.status === 'open' && now < new Date(mock.ends_at) && new Date(mock.ends_at) - now <= 10 * 60_000) {
           const submitted = await Submission.countDocuments({ mock_id: mock._id });
           await delivered(`bio:remind:${mock._id}`, () => api.sendMessage(group.chat_id,
@@ -142,7 +166,8 @@ async function tick(api, now = new Date()) {
         }
         if (mock.status === 'open' && new Date(mock.ends_at) <= now || mock.status === 'closed') await closeMock(api, group, mock, now);
       }
+      await publishWeekly(api,group,now);
     } catch (e) { console.error('Biology schedule failed', group._id, e.code || 'delivery'); }
   }
 }
-module.exports = { ownerId, isOwner, profile, enroll, begin, accepted, accept, delivered, tick, weeklyText, resultsText, closeMock, openMock };
+module.exports = { ownerId, isOwner, profile, enroll, begin, accepted, accept, delivered, tick, weeklyText, dailyText, periodRows, publishWeekly, resultsText, closeMock, openMock };

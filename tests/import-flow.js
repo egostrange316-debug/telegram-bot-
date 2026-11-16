@@ -48,7 +48,7 @@ module.exports=async({msg,cb,owner,student,outsider,g,bot,checks,db,calls})=>{
  const report=await service.resultsText(m);ok(!report.includes('Javob kaliti')&&report.includes('29/30'),'group leaderboard never exposes the answer key');
  await Mock.updateOne({_id:m._id},{$set:{ends_at:new Date(Date.now()-1000)}});
  ok((await request('submit',{...body,nonce:next},token)).status===400,'late API submission is refused even with a valid session');
- await msg(owner,'🛠 Admin rejimi');await cb(owner,`cd:${p._id}`);ok((await Package.findById(p._id)).status==='deleted'&&await Submission.countDocuments({mock_id:m._id})===2,'deleting catalogue entry preserves historic runs and results');
+ await msg(owner,'🛠 Admin rejimi');await cb(owner,`cd:${p._id}`);ok((await Package.findById(p._id)).status==='deleted'&&await Submission.countDocuments({mock_id:m._id})===0&&(await Mock.findById(m._id)).status==='deleted','deleting catalogue entry erases its results and disables historical runs');
  await msg(owner,C.upload);await msg(owner,null,{document:{file_id:'fixture-import-bundle',file_name:'two-mocks.zip'}});
  let pick=(await BotSession.findOne({telegram_id:owner})).data;
  ok(pick.step==='import_pick'&&pick.data.packages.length===2&&!await Package.exists({mock_id:'BIO7-BATCH-A'}),'multi-MOCK ZIP waits for admin selection and persists the choices');

@@ -20,7 +20,9 @@ Bot guruhga hali ulanmagan bo‘lsa: botni guruh admini qiling, guruhda `/ulash`
 
 **Tahrirlash:** faqat qoralama uchun shu `mock_id` va `version` bilan to‘liq tuzatilgan ZIP/JSON yuboring. Tasdiqlangan versiya o‘zgarmaydi; yangilash uchun `version`ni oshiring. Oldingi natijalar eski versiyaga bog‘langanicha qoladi.
 
-**O‘chirish:** katalogdan yashiradi, o‘tkazilgan yoki allaqachon rejalashtirilgan testlar/natijalarni o‘chirmaydi. Boshlanmagan yuborishni bekor qilish: **Mocklar navbati**.
+**O‘chirish:** tasdiqlangach MOCKning barcha rejalashtirilgan/o‘tkazilgan nusxalari, javoblari, urinishlari, natijalari va tahlili olib tashlanadi. U ilova, **Natijalarim** va reytingdan yo‘qoladi; eski havolalari yopiladi. Bu amal qaytarilmaydi. Boshqa MOCKlar saqlanadi. Faqat boshlanmagan bitta yuborishni bekor qilish uchun **Mocklar navbati**dan foydalaning.
+
+**Reyting:** test tugagach guruhga shu kunning natijalari chiqadi. To‘liq haftalik yig‘indi dushanba 00:00 da (Toshkent), oldingi dushanba–yakshanba uchun bir marta yuboriladi. Har daqiqalik tekshiruv sababli bir daqiqagacha kechikish mumkin. Avval yuborilgan Telegram xabarlari o‘zgarishsiz qoladi.
 
 **Qayta topshirish:** **🔄 Qayta topshirishga ruxsat** → `MOCKKOD TELEGRAM_ID`; yoki Natijalar → mock → Ruxsat berish → ID. Faqat ochiq mockda, bir marta, jami 5 urinishgacha. O‘quvchi mockni qayta ochadi. Avvalgi urinish tarixi saqlanadi; reytingda oxirgi ruxsat etilgan natija turadi. Muddat tugagach ruxsat ham topshirishni ochmaydi.
 
@@ -163,7 +165,7 @@ npm run test:postgres
 npm run build:edge
 ```
 
-1. Mavjud bazada oldingi biologiya migratsiyasi ustidan **faqat** `supabase/migrations/20261115085124_biology_import.sql`ni qo‘llang. Mavjud bazada boshlang‘ich sxemani qayta yaratmang.
+1. Mavjud bazada faqat hali qo‘llanmagan migratsiyalarni tartib bilan bajaring: `20261115085124_biology_import.sql`, keyin `20261116144055_biology_delete_results.sql`. Ikkinchisi oldin o‘chirilgan MOCKlarning qolgan natijalarini ham tozalaydi. Boshlang‘ich sxemani qayta yaratmang.
 2. Vault’da `enzo_MINIAPP_URL`ga `https://biology-mock-enzo.egostrange316.chatgpt.site` yozing. `enzo_BOT_TOKEN`, `enzo_ADMIN_IDS`, Gemini va webhook/cron sirlarini saqlang. Tokenlar faqat server muhitida/Vault’da; `.env` Git’da yo‘q.
 3. `miniapp/` fayllarini HTTPS static hostingga joylang. Boshqa hosting tanlansa `app.js`dagi API URL va `_headers`dagi origin ham moslansin. Supabase Edge Function HTML emas, API xizmatini beradi.
 4. `enzo-bot` funksiyasini qayta deploy qiling: `index.ts`, `handler.mjs`, yangi `runtime.mjs`, `deno.json`. `verify_jwt=false` qoladi: webhook maxfiy sarlavhasi, cron siri va Mini App Telegram imzosi o‘z yo‘llarida tekshiriladi.
@@ -181,4 +183,4 @@ Bu buyruq faqat `enzo-bot`ni yangilaydi. `--prune` ishlatmang: loyihadagi boshqa
 
 CLI orqali deploy ishlatilsa, loyihadagi pin qilingan Supabase CLI `--help` hujjatini tekshiring; platforma boshqaruv paneli yoki rasmiy MCP deploy ham mumkin. `npm start` eski MongoDB/ENZO dasturi: jonli biologiya bot uchun undan foydalanmang.
 
-Yangi bazaga o‘rnatish tartibi: `supabase/sql/schema.sql`, `20261115072715_biology_mock.sql`, `20261115085124_biology_import.sql`, so‘ng Vault/webhook/cron — `SUPABASE.md`ga qarang.
+Yangi bazaga o‘rnatish tartibi: `supabase/sql/schema.sql`, `20261115072715_biology_mock.sql`, `20261115085124_biology_import.sql`, `20261116144055_biology_delete_results.sql`, so‘ng Vault/webhook/cron — `SUPABASE.md`ga qarang.

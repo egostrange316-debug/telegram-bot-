@@ -168,9 +168,10 @@ var require_postgres = __commonJS({
     model("BioSubmission", "bio_submissions");
     model("BioPackage", "bio_packages", { status: "draft" });
     model("BioAttempt", "bio_attempts");
+    var deleteBiologyPackage = (args) => rpc("bio_delete_package", args);
     var beginBiology = (args) => rpc("bio_begin", args);
     var submitBiology = (args) => rpc("bio_submit_v2", args);
-    module.exports = { ...models, configureDatabase, revive, project, submitBiology, beginBiology };
+    module.exports = { ...models, configureDatabase, revive, project, submitBiology, beginBiology, deleteBiologyPackage };
   }
 });
 
@@ -451,6 +452,10 @@ var require_domain = __commonJS({
       if (slot > now.getTime()) slot -= 7 * DAY;
       return new Date(slot);
     }
+    function dayStart(now = /* @__PURE__ */ new Date()) {
+      const p = new Date(now.getTime() + OFFSET);
+      return new Date(Date.UTC(p.getUTCFullYear(), p.getUTCMonth(), p.getUTCDate()) - OFFSET);
+    }
     function weekStart(now = /* @__PURE__ */ new Date()) {
       const p = new Date(now.getTime() + OFFSET);
       return new Date(Date.UTC(p.getUTCFullYear(), p.getUTCMonth(), p.getUTCDate()) - OFFSET - (p.getUTCDay() + 6) % 7 * DAY);
@@ -464,7 +469,7 @@ var require_domain = __commonJS({
       });
     }
     var isMember = (m) => ["creator", "administrator", "member"].includes(m?.status) || m?.status === "restricted" && m.is_member === true;
-    module.exports = { InputError, esc, parseAnswers, answerText, grade, localTime, parseLocal, latestSlot, weekStart, rank, isMember, DAY };
+    module.exports = { InputError, esc, parseAnswers, answerText, grade, localTime, parseLocal, latestSlot, weekStart, dayStart, rank, isMember, DAY };
   }
 });
 
@@ -473,10 +478,10 @@ var require_service = __commonJS({
   "src/biology/service.js"(exports, module) {
     var { randomBytes } = require_crypto();
     var config = require_config();
-    var { BioProfile: Profile, BioGroup: Group, BioMock: Mock, BioSubmission: Submission, JobLog, submitBiology, beginBiology } = require_postgres();
+    var { BioProfile: Profile, BioGroup: Group, BioMock: Mock, BioSubmission: Submission, BioPackage: Package, JobLog, submitBiology, beginBiology } = require_postgres();
     var { deliverOnce, sendReport } = require_delivery();
     var { sendMaterial } = require_common();
-    var { InputError, esc, answerText, localTime, latestSlot, weekStart, rank, isMember, DAY } = require_domain();
+    var { InputError, esc, answerText, localTime, latestSlot, weekStart, dayStart, rank, isMember, DAY } = require_domain();
     var START_REMINDER_MS = 10 * 6e4;
     var ownerId = () => config.ADMIN_IDS[0];
     var isOwner = (id) => Number.isSafeInteger(id) && id === ownerId();
@@ -546,10 +551,12 @@ Guruh natijalari muddat tugagach chiqadi. Qayta topshirish faqat admin ruxsati b
       })) return;
       await Mock.updateOne({ _id: mock._id, status: "opening" }, { $set: { status: "open" } });
     }
-    async function weeklyRows(groupId, date) {
-      const start = weekStart(date), end = new Date(start.getTime() + 7 * DAY);
-      const mocks = await Mock.find({ group_id: groupId, status: "closed", ends_at: { $gte: start, $lt: end } });
-      const rows = await Submission.find({ mock_id: { $in: mocks.map((m) => m._id) } });
+    async function periodRows(groupId, start, end, asOf = /* @__PURE__ */ new Date()) {
+      const mocks = await Mock.find({ group_id: groupId, status: "closed", ends_at: { $gte: start, $lt: end, $lte: asOf } });
+      const packages = await Package.find({ _id: { $in: mocks.map((m) => m.package_id).filter(Boolean) }, status: { $ne: "deleted" } });
+      const valid = new Set(packages.map((p) => p._id));
+      const ids = mocks.filter((m) => !m.package_id || valid.has(m.package_id)).map((m) => m._id);
+      const rows = await Submission.find({ mock_id: { $in: ids } });
       const sums = /* @__PURE__ */ new Map();
       for (const row of rows) {
         const sum = sums.get(row.telegram_id) || { name: row.name, correct: 0, total: 0, tests: 0 };
@@ -558,14 +565,34 @@ Guruh natijalari muddat tugagach chiqadi. Qayta topshirish faqat admin ruxsati b
         sum.tests++;
         sums.set(row.telegram_id, sum);
       }
-      return { start, rows: rank([...sums.values()]) };
+      return { start, end, rows: rank([...sums.values()]) };
     }
-    async function weeklyText(groupId, date) {
-      const { start, rows } = await weeklyRows(groupId, date);
-      return `\u{1F3C6} <b>Haftalik reyting \u2014 ${localTime(start).slice(0, 10)}</b>
-To\u2018g\u2018ri javoblar yig\u2018indisi; teng ball \u2014 teng o\u2018rin.
+    var rankingLines = (rows) => rows.map((r) => `${r.place}. ${esc(r.name)} \u2014 <b>${r.correct}/${r.total}</b> \xB7 ${r.tests} mock`).join("\n") || "Hali yakunlangan natija yo\u2018q.";
+    async function dailyText(groupId, date, asOf = /* @__PURE__ */ new Date()) {
+      const start = dayStart(date), end = new Date(start.getTime() + DAY);
+      const { rows } = await periodRows(groupId, start, end, asOf);
+      return `\u{1F4CA} <b>Kunlik reyting \u2014 ${localTime(start).slice(0, 10)}</b>
+Faqat shu kuni yakunlangan MOCKlar. Teng ball \u2014 teng o\u2018rin.
 
-` + (rows.map((r) => `${r.place}. ${esc(r.name)} \u2014 <b>${r.correct}/${r.total}</b> \xB7 ${r.tests} mock`).join("\n") || "Hali yakunlangan natija yo\u2018q.");
+` + rankingLines(rows);
+    }
+    async function weeklyText(groupId, date, asOf = /* @__PURE__ */ new Date()) {
+      const start = weekStart(date), end = new Date(start.getTime() + 7 * DAY);
+      const { rows } = await periodRows(groupId, start, end, asOf);
+      return `\u{1F3C6} <b>Haftalik yakun \u2014 ${localTime(start).slice(0, 10)} \u2014 ${localTime(new Date(end - 1)).slice(0, 10)}</b>
+Hafta davomida yakunlangan MOCKlar yig\u2018indisi. Teng ball \u2014 teng o\u2018rin.
+
+` + rankingLines(rows);
+    }
+    async function publishWeekly(api, group, now) {
+      const end = weekStart(now), start = new Date(end.getTime() - 7 * DAY);
+      const key = `bio:week-final:${group._id}:${start.toISOString()}`;
+      if (await JobLog.findOne({ key: `${key}:complete`, state: "done" })) return;
+      const { rows } = await periodRows(group._id, start, end, now);
+      if (!rows.length) return;
+      const text = await weeklyText(group._id, start, now);
+      if (await sendReport(api, group.chat_id, text, key)) await delivered(`${key}:complete`, async () => {
+      });
     }
     async function resultsText(mock) {
       const submissions = await Submission.find({ mock_id: mock._id });
@@ -587,13 +614,17 @@ Topshirdi: ${submissions.length}/${mock.roster.length}
         mock = await Mock.findOneAndUpdate({ _id: mock._id, status: "open", ends_at: { $lte: now } }, { $set: { status: "closed", closed_at: now } }, { new: true });
         if (!mock) return;
       }
-      if (!mock.report_text) {
-        const report_text = await resultsText(mock), weekly_text = await weeklyText(group._id, new Date(mock.ends_at));
-        mock = await Mock.findOneAndUpdate({ _id: mock._id, status: "closed", report_text: { $exists: false } }, { $set: { report_text, weekly_text } }, { new: true }) || await Mock.findById(mock._id);
+      mock = await Mock.findById(mock._id);
+      if (!mock || mock.status !== "closed" || new Date(mock.ends_at) > now) return;
+      if (!mock.report_text || !mock.daily_text) {
+        const report_text = await resultsText(mock), daily_text = await dailyText(group._id, new Date(mock.ends_at), now);
+        mock = await Mock.findOneAndUpdate({ _id: mock._id, status: "closed" }, { $set: { report_text, daily_text }, $unset: { weekly_text: 1 } }, { new: true });
+        if (!mock) return;
       }
       if (!await sendReport(api, group.chat_id, mock.report_text, `bio:result:${mock._id}`)) return;
-      if (!await sendReport(api, group.chat_id, mock.weekly_text, `bio:weekly:${mock._id}`)) return;
-      await Mock.updateOne({ _id: mock._id }, { $set: { reported: true } });
+      if ((await Mock.findById(mock._id))?.status !== "closed") return;
+      if (!await sendReport(api, group.chat_id, mock.daily_text, `bio:daily:${mock._id}`)) return;
+      await Mock.updateOne({ _id: mock._id, status: "closed" }, { $set: { reported: true } });
     }
     async function tick(api, now = /* @__PURE__ */ new Date()) {
       const groups = await Group.find({ enabled: true });
@@ -630,6 +661,7 @@ Tayyor turing \u2014 test boshlanganda shu guruhga xabar yuboriladi.`,
               } else await openMock(api, group, mock, now);
             }
             mock = await Mock.findById(mock._id);
+            if (!mock || mock.status === "deleted") continue;
             if (mock.status === "open" && now < new Date(mock.ends_at) && new Date(mock.ends_at) - now <= 10 * 6e4) {
               const submitted = await Submission.countDocuments({ mock_id: mock._id });
               await delivered(`bio:remind:${mock._id}`, () => api.sendMessage(
@@ -639,12 +671,13 @@ Tayyor turing \u2014 test boshlanganda shu guruhga xabar yuboriladi.`,
             }
             if (mock.status === "open" && new Date(mock.ends_at) <= now || mock.status === "closed") await closeMock(api, group, mock, now);
           }
+          await publishWeekly(api, group, now);
         } catch (e) {
           console.error("Biology schedule failed", group._id, e.code || "delivery");
         }
       }
     }
-    module.exports = { ownerId, isOwner, profile, enroll, begin, accepted, accept, delivered, tick, weeklyText, resultsText, closeMock, openMock };
+    module.exports = { ownerId, isOwner, profile, enroll, begin, accepted, accept, delivered, tick, weeklyText, dailyText, periodRows, publishWeekly, resultsText, closeMock, openMock };
   }
 });
 
@@ -3500,7 +3533,7 @@ var require_importer = __commonJS({
 var require_catalog = __commonJS({
   "src/biology/catalog.js"(exports, module) {
     var { randomBytes } = require_crypto();
-    var { BioPackage: Package, BioMock: Mock, BioGroup: Group, BioAttempt: Attempt, BioSubmission: Submission } = require_postgres();
+    var { BioPackage: Package, BioMock: Mock, BioGroup: Group, BioAttempt: Attempt, BioSubmission: Submission, deleteBiologyPackage } = require_postgres();
     var { InputError, localTime } = require_domain();
     var service = require_service();
     async function savePackage(data, editId) {
@@ -3516,6 +3549,11 @@ var require_catalog = __commonJS({
         if (e.code === 11e3) throw new InputError("Bu MOCK ID va versiya allaqachon bor.");
         throw e;
       }
+    }
+    async function deletePackage(packageId) {
+      const result = await deleteBiologyPackage({ p_package_id: packageId });
+      if (!result.ok) throw new InputError("MOCK topilmadi.");
+      return result;
     }
     function publicMock(m) {
       return {
@@ -3611,7 +3649,7 @@ var require_catalog = __commonJS({
         materials: []
       };
     }
-    module.exports = { savePackage, publicMock, openForUser, permitRetake, snapshot, reviewReady, reviewForUser };
+    module.exports = { savePackage, publicMock, openForUser, permitRetake, snapshot, reviewReady, reviewForUser, deletePackage };
   }
 });
 
@@ -3697,7 +3735,7 @@ Savollar va kalitni ko\u2018rib, tasdiqlang. HTML xavfsiz test oynasida avtomati
           setSession(ctx.from.id, { step: "import_file", data: { edit_id: p._id } });
           return ctx.reply(`${p.mock_id} v${p.version} uchun tuzatilgan ZIP/JSON yuboring. Shu ID/versiya va barcha savollar/kalit bo\u2018lsin.`);
         }
-        if (action === "remove") return ctx.reply(`${p.mock_id} v${p.version} katalogdan o\u2018chirilsinmi? O\u2018tkazilgan va rejalashtirilgan mocklar, natijalar saqlanadi. Rejalashtirilganini to\u2018xtatish: \xABMocklar navbati\xBB.`, { reply_markup: new InlineKeyboard().text("\u{1F5D1} Tasdiqlayman", `cd:${id}`) });
+        if (action === "remove") return ctx.reply(`${p.mock_id} v${p.version} katalogdan o\u2018chirilsinmi? Unga tegishli rejalashtirilgan testlar, saqlangan javoblar, natijalar va tahlil ham o\u2018chadi. Reyting qayta hisoblanadi.`, { reply_markup: new InlineKeyboard().text("\u{1F5D1} Tasdiqlayman", `cd:${id}`) });
         const data = { ...catalog.snapshot(p), _id: randomBytes(12).toString("hex") };
         setSession(ctx.from.id, { step: "bio_group", data });
         return showGroups(ctx, true);
@@ -3711,13 +3749,14 @@ Savollar va kalitni ko\u2018rib, tasdiqlang. HTML xavfsiz test oynasida avtomati
       });
       bot.callbackQuery(/^cd:([a-f\d]{24})$/, async (ctx) => {
         await admin(ctx);
-        await Package.updateOne({ _id: ctx.match[1] }, { $set: { status: "deleted" } });
+        await catalog.deletePackage(ctx.match[1]);
+        clearSession(ctx.from.id);
         await ctx.answerCallbackQuery();
-        return ctx.editMessageText("MOCK katalogdan olib tashlandi. Avvalgi o\u2018tkazishlar va natijalar saqlangan.");
+        return ctx.editMessageText("MOCK, uning javoblari va natijalari o\u2018chirildi. Ilovadagi ro\u2018yxat va reytingdan ham olib tashlandi.");
       });
       bot.callbackQuery(/^cq:([a-f\d]{24}):(\d{1,2})$/, async (ctx) => {
         await admin(ctx);
-        const p = await Package.findById(ctx.match[1]), i = Number(ctx.match[2]), q = p?.questions[i];
+        const p = await Package.findById(ctx.match[1]), i = Number(ctx.match[2]), q = p?.questions?.[i];
         if (!q) throw new InputError("Savol topilmadi.");
         const kb = new InlineKeyboard();
         if (i > 0) kb.text("\u2190", `cq:${p._id}:${i - 1}`);
@@ -3741,7 +3780,7 @@ Admin kaliti: ${p.answer_key[i]}`, { reply_markup: kb });
       bot.callbackQuery(/^cr:([a-f\d]{24})$/, async (ctx) => {
         await admin(ctx);
         const m = await Mock.findById(ctx.match[1]);
-        if (!m) throw new InputError("Mock topilmadi.");
+        if (!m || m.status === "deleted") throw new InputError("Mock topilmadi.");
         await ctx.answerCallbackQuery();
         await sendReport(ctx.api, ctx.chat.id, (m.status === "open" ? "\u23F3 Joriy natijalar (hali yakunlanmagan)\n" : "") + await service.resultsText(m));
         return ctx.reply("Qayta topshirish kerak bo\u2018lsa:", { reply_markup: new InlineKeyboard().text("\u{1F504} Ruxsat berish", `ct:${m.code}`) });
@@ -4254,7 +4293,7 @@ Qayta topshirish uchun admin ruxsati kerak.${ctx.chat.type === "private" ? "\nVa
       bot.hears(B.rank, async (ctx) => {
         const p = await service.profile(ctx.from), groups = await Group.find({ _id: { $in: p.group_ids }, enabled: true });
         for (const g of groups) await sendReport(ctx.api, ctx.chat.id, `<b>${esc(g.title)}</b>
-` + await service.weeklyText(g._id, /* @__PURE__ */ new Date()));
+` + await service.dailyText(g._id, /* @__PURE__ */ new Date()));
         if (!groups.length) return ctx.reply("Avval guruhda \xABQatnashaman\xBB tugmasini bosing.");
       });
       bot.hears(B.help, (ctx) => ctx.reply("1. Guruhda \xABQatnashaman\xBB bosing.\n2. Mockni muddatida ishlang.\n3. Botga yoki guruhdagi mock xabariga javob qilib javoblaringizni yuboring va tasdiqlang.\n4. Umumiy muddat tugagach natija, guruh reytingi va Natijalarim \u2192 Tahlil ochiladi.\nRasm aniq o\u2018qilmasa: 1A 2B 3C \u2026 matnidan foydalaning.\nAdmin: botni guruhga admin qiling \u2192 /ulash."));

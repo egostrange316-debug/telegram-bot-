@@ -51,14 +51,14 @@ function registerImportUI(bot,{admin,showGroups,menu,download=downloadImport}) {
       if(p.status!=='draft')throw new InputError('Tasdiqlangan versiya o‘zgarmaydi. JSONdagi version sonini oshirib yangi MOCK yuklang.');
       setSession(ctx.from.id,{step:'import_file',data:{edit_id:p._id}});return ctx.reply(`${p.mock_id} v${p.version} uchun tuzatilgan ZIP/JSON yuboring. Shu ID/versiya va barcha savollar/kalit bo‘lsin.`);
     }
-    if(action==='remove')return ctx.reply(`${p.mock_id} v${p.version} katalogdan o‘chirilsinmi? O‘tkazilgan va rejalashtirilgan mocklar, natijalar saqlanadi. Rejalashtirilganini to‘xtatish: «Mocklar navbati».`,{reply_markup:new InlineKeyboard().text('🗑 Tasdiqlayman',`cd:${id}`)});
+    if(action==='remove')return ctx.reply(`${p.mock_id} v${p.version} katalogdan o‘chirilsinmi? Unga tegishli rejalashtirilgan testlar, saqlangan javoblar, natijalar va tahlil ham o‘chadi. Reyting qayta hisoblanadi.`,{reply_markup:new InlineKeyboard().text('🗑 Tasdiqlayman',`cd:${id}`)});
     const data={...catalog.snapshot(p),_id:randomBytes(12).toString('hex')};
     setSession(ctx.from.id,{step:'bio_group',data});return showGroups(ctx,true);
   });
   bot.callbackQuery(/^ca:([a-f\d]{24})$/,async ctx=>{await admin(ctx);const p=await Package.findOneAndUpdate({_id:ctx.match[1],status:'draft'},{$set:{status:'approved'}},{new:true});if(!p)throw new InputError('Qoralama topilmadi yoki allaqachon tasdiqlangan.');await ctx.answerCallbackQuery();return card(ctx,p);});
-  bot.callbackQuery(/^cd:([a-f\d]{24})$/,async ctx=>{await admin(ctx);await Package.updateOne({_id:ctx.match[1]},{$set:{status:'deleted'}});await ctx.answerCallbackQuery();return ctx.editMessageText('MOCK katalogdan olib tashlandi. Avvalgi o‘tkazishlar va natijalar saqlangan.');});
+  bot.callbackQuery(/^cd:([a-f\d]{24})$/,async ctx=>{await admin(ctx);await catalog.deletePackage(ctx.match[1]);clearSession(ctx.from.id);await ctx.answerCallbackQuery();return ctx.editMessageText('MOCK, uning javoblari va natijalari o‘chirildi. Ilovadagi ro‘yxat va reytingdan ham olib tashlandi.');});
   bot.callbackQuery(/^cq:([a-f\d]{24}):(\d{1,2})$/,async ctx=>{
-    await admin(ctx);const p=await Package.findById(ctx.match[1]),i=Number(ctx.match[2]),q=p?.questions[i];if(!q)throw new InputError('Savol topilmadi.');
+    await admin(ctx);const p=await Package.findById(ctx.match[1]),i=Number(ctx.match[2]),q=p?.questions?.[i];if(!q)throw new InputError('Savol topilmadi.');
     const kb=new InlineKeyboard();if(i>0)kb.text('←',`cq:${p._id}:${i-1}`);if(i<p.questions.length-1)kb.text('→',`cq:${p._id}:${i+1}`);
     kb.row().text('MOCK kartasi',`cp:view:${p._id}`);await ctx.answerCallbackQuery();
     return ctx.reply(`${i+1}/${p.question_count} · ${q.question_id}\n${q.text}\n\n${Object.entries(q.options).map(([k,v])=>`${k}) ${v}`).join('\n')}\n\nAdmin kaliti: ${p.answer_key[i]}`,{reply_markup:kb});
@@ -69,7 +69,7 @@ function registerImportUI(bot,{admin,showGroups,menu,download=downloadImport}) {
     return ctx.reply(rows.length?'Natija va leaderboard uchun MOCKni tanlang:':'Hali ochilgan mock yo‘q.',{reply_markup:kb});
   });
   bot.callbackQuery(/^cr:([a-f\d]{24})$/,async ctx=>{
-    await admin(ctx);const m=await Mock.findById(ctx.match[1]);if(!m)throw new InputError('Mock topilmadi.');await ctx.answerCallbackQuery();
+    await admin(ctx);const m=await Mock.findById(ctx.match[1]);if(!m||m.status==='deleted')throw new InputError('Mock topilmadi.');await ctx.answerCallbackQuery();
     await sendReport(ctx.api,ctx.chat.id,(m.status==='open'?'⏳ Joriy natijalar (hali yakunlanmagan)\n':'')+await service.resultsText(m));
     return ctx.reply('Qayta topshirish kerak bo‘lsa:',{reply_markup:new InlineKeyboard().text('🔄 Ruxsat berish',`ct:${m.code}`)});
   });

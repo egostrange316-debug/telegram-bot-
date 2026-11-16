@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const config = require('../src/config');
-const { BioGroup: Group, BioMock: Mock, BioProfile: Profile, BioAttempt: Attempt } = require('../src/storage/postgres');
+const { BioGroup: Group, BioMock: Mock, BioProfile: Profile, BioAttempt: Attempt, BioPackage: Package } = require('../src/storage/postgres');
 const service = require('../src/biology/service');
 const { snapshot } = require('../src/biology/catalog');
 const { validatePackage } = require('../src/biology/importer');
@@ -12,7 +12,7 @@ module.exports = async function joinFlow({ msg, cb, outsider, bot, checks, calls
   const user = 991000020, other = 991000021;
   const group = await Group.create({ chat_id: -100991000020, title: 'Join fixture' });
   const sample = require('../examples/mock-30/import.json');
-  const data = snapshot({ ...validatePackage(sample.mock, sample.answer_key), status: 'approved', _id: 'c'.repeat(24) });
+  const data = snapshot(await Package.create({ ...validatePackage(sample.mock, sample.answer_key), mock_id:'BIO7-JOIN',status: 'approved' }));
   config.MINIAPP_URL = 'https://biology.example/?theme=dark';
   let m = await Mock.create({ ...data, code: 'c00101', group_id: group._id, status: 'scheduled',
     starts_at: new Date(Date.now() - 1000), ends_at: new Date(Date.now() + 3600_000) });

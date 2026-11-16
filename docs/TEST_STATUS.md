@@ -1,3 +1,16 @@
+# O‘chirish va kunlik/haftalik reyting — 2026-11-16
+
+- `bio_delete_package` atomar migratsiyasi katalog MOCKini, barcha ishga tushirilgan/rejalashtirilgan nusxalarini o‘chiradi; savollar/kalitlar, topshirilgan javoblar, urinishlar va pending sessiyalar olib tashlanadi. Eski havola/worker testni qayta ocholmaydi. Faqat xizmat roliga ruxsat bor.
+- Eski soft-delete ma’lumotlari migratsiya paytida tozalandi: 2 MOCKning 3 nusxasi yopildi, ularga tegishli saqlangan javob/urinish va kalitlar qoldig‘i 0. №3 ning `29/30` natijasi saqlandi. `29/60`ga sabab bo‘lgan o‘chirilgan №2 dagi `0/30` olib tashlandi.
+- Mini App test/natija ro‘yxati va tahlil eski yozuvlarni ko‘rsatmaydi; o‘quvchi **Reyting** tugmasi kunlik hisobni ochadi. Guruhga test yakunida kunlik reyting, keyingi dushanba 00:00 Toshkentdan keyin oldingi to‘liq haftaning yakuni yuboriladi. Yetkazish xatosi qayta uriniladi, muvaffaqiyatli hisobot qayta yuborilmaydi.
+- `npm run test:biology`: 135 tekshiruv PASS; `npm run test:postgres`: 17 PASS; `npm run test:unit`: 80 PASS. Qo‘shimcha migratsiya sinovi bir guruhdagi ikki eski o‘chirilgan MOCKni tozalash va boshqa natijani saqlashni tekshiradi. PGlite’da haqiqiy SQL, Telegram API soxta; yangi oqim xizmat roli bilan ham bajarildi.
+- Tekshiruvlar: kun/hafta chegarasi, hafta tugamaguncha haftalik yakunni yubormaslik, qayta urinish, admin ruxsati, eski testni qayta yaratishni bloklash, ilova ro‘yxati/tahlili, qayta o‘chirish, boshqa MOCK natijasini saqlash.
+- `npm run check`, `npm run build:edge`, `git diff --check`: PASS. Supabase `enzo-bot` v10 ACTIVE. `/health` 200, imzosiz `/api/list` 401. Cron muvaffaqiyatli, HTTP 202; oldingi hafta uchun haqiqiy yakun hisobotining `part:0` va `complete` yozuvlari `done`.
+- Telegramga avval yuborilgan xabarlar avtomatik tahrirlanmaydi. Mini Appni qayta ochish yangi ro‘yxatni oladi. Frontend o‘zgarmadi, yangi soxta foydalanuvchi/guruh ma’lumoti jonli bazaga kiritilmadi.
+- Yangi xavfsizlik advisor muammosi yo‘q. Oldingi [pg_net](https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public) va alohida o‘yinning [RLS](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy) eslatmalari o‘zgartirilmadi.
+
+---
+
 # №3/№4 public/server-only ZIP integratsiyasi — 2026-11-15
 
 - Asl `BIO_MOCK_3_4_QAYTA_YUKLASH.zip` (SHA-256 `d68f1cb4287b3c9f396c98f5da4ab518370dd576289ad444c3298250bfba4eaf`) tekshirildi: 7 fayl, 2 × 30 savol. Har ikkala HTML savollari tegishli public JSON bilan aynan bir xil. Kalitlar har bir savol IDsi uchun bor va A/B/C/Dga mos; biologik mazmun/kalitning ilmiy to‘g‘riligi ushbu dasturiy sinovning qismi emas.

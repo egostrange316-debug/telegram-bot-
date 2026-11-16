@@ -84,7 +84,7 @@ module.exports = async function run(rpc, db) {
     failResult=true;await service.tick(bot.api,new Date());m=await Mock.findById(mid);
     ok(m.status==='closed'&&!m.reported,'failed result send is retryable after submission window closes');
     failResult=false;await service.tick(bot.api,new Date());m=await Mock.findById(mid);
-    ok(m.reported&&m.report_text.includes('Absent')&&m.report_text.includes('49/50')&&m.weekly_text.includes('Owner'),'deadline publishes scores, missing participants and weekly ranking');
+    ok(m.reported&&m.report_text.includes('Absent')&&m.report_text.includes('49/50')&&m.daily_text.includes('Owner')&&!m.weekly_text,'deadline publishes scores, missing participants and daily ranking');
     const endCalls=calls.length;await service.tick(bot.api,new Date());ok(calls.length===endCalls,'result report is not sent again on the next scheduler tick');
     await msg(student,'/natijalar');ok(calls.at(-1).payload.text.includes('savollar: 1')&&!calls.at(-1).payload.text.includes('→'),'student sees mistaken question numbers without disclosure of the key');
     await Mock.create({code:'123abc',title:'Thirty',count:30,status:'queued',group_id:g._id,answer_key:key.slice(0,30),materials:[{kind:'text',text:'Thirty'}]});
@@ -98,6 +98,7 @@ module.exports = async function run(rpc, db) {
     await require('./public-import-flow').run({msg,cb,owner,student,g,bot,checks});
     await require('./join-flow')({msg,cb,outsider,bot,checks,calls});
     await require('./review-flow')({msg,cb,bot,checks,calls});
+    await require('./deletion-ranking-flow')({msg,cb,owner,student,bot,checks,db});
     await require('./schedule-flow')(checks);
     return {ok:true,checks};
   } finally {

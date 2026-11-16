@@ -100,6 +100,7 @@ model('BioMock', 'bio_mocks', { status: 'draft', materials: [], roster: [] });
 model('BioSubmission', 'bio_submissions');
 model('BioPackage', 'bio_packages', { status: 'draft' });
 model('BioAttempt', 'bio_attempts');
+const deleteBiologyPackage = args => rpc('bio_delete_package', args);
 const beginBiology = args => rpc('bio_begin', args);
 const submitBiology = args => rpc('bio_submit_v2', args);
-module.exports = { ...models, configureDatabase, revive, project, submitBiology, beginBiology };
+module.exports = { ...models, configureDatabase, revive, project, submitBiology, beginBiology, deleteBiologyPackage };

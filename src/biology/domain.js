@@ -46,6 +46,10 @@ function latestSlot(group, now = new Date()) {
   if (slot > now.getTime()) slot -= 7 * DAY;
   return new Date(slot);
 }
+function dayStart(now = new Date()) {
+  const p = new Date(now.getTime() + OFFSET);
+  return new Date(Date.UTC(p.getUTCFullYear(),p.getUTCMonth(),p.getUTCDate())-OFFSET);
+}
 function weekStart(now = new Date()) {
   const p = new Date(now.getTime() + OFFSET);
   return new Date(Date.UTC(p.getUTCFullYear(), p.getUTCMonth(), p.getUTCDate()) - OFFSET - ((p.getUTCDay() + 6) % 7) * DAY);
@@ -56,4 +60,4 @@ function rank(rows) {
   return sorted.map((r, i) => { if (!i || r.correct !== sorted[i - 1].correct) place = i + 1; return { ...r, place }; });
 }
 const isMember = m => ['creator', 'administrator', 'member'].includes(m?.status) || m?.status === 'restricted' && m.is_member === true;
-module.exports = { InputError, esc, parseAnswers, answerText, grade, localTime, parseLocal, latestSlot, weekStart, rank, isMember, DAY };
+module.exports = { InputError, esc, parseAnswers, answerText, grade, localTime, parseLocal, latestSlot, weekStart, dayStart, rank, isMember, DAY };

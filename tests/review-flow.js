@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const config = require('../src/config');
-const { BioMock:Mock, BioGroup:Group, BioProfile:Profile, BioSubmission:Submission, BioAttempt:Attempt } = require('../src/storage/postgres');
+const { BioMock:Mock, BioGroup:Group, BioProfile:Profile, BioSubmission:Submission, BioAttempt:Attempt, BioPackage:Package } = require('../src/storage/postgres');
 const { handleApi } = require('../src/biology/api');
 const { issueSession } = require('../src/biology/auth');
 const { snapshot } = require('../src/biology/catalog');
@@ -15,7 +15,7 @@ module.exports = async function reviewFlow({ msg, cb, bot, calls, checks }) {
   const person = id => ({id,first_name:'Review student'});
   await service.enroll(bot.api,person(user),group);await service.enroll(bot.api,person(other),group);
   const sample = require('../examples/mock-30/import.json');
-  const data = snapshot({...validatePackage(sample.mock,sample.answer_key),status:'approved',_id:'d'.repeat(24)});
+  const data = snapshot(await Package.create({...validatePackage(sample.mock,sample.answer_key),mock_id:'BIO7-REVIEW',status:'approved'}));
   let m = await Mock.create({...data,group_id:group._id,code:'d00101',status:'open',starts_at:new Date(Date.now()-1000),ends_at:new Date(Date.now()+3600_000)});
   const answers=[...m.answer_key];answers[0]=m.answer_key[0]==='A'?'B':'A';answers[1]='-';
   await service.accept(m,person(user),answers);

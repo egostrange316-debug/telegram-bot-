@@ -48,8 +48,11 @@ Admin tahriri uchun yana **Admin rejimi**ga qaytadi. Egaga kalit oldindan ma’l
 ## Guruh hisobotlari
 
 Muddat tugagach bot har bir topshirgan qatnashchining bali,
-mock reytingi, topshirmaganlar va haftalik reytingni guruhga chiqaradi.
-Teng ball — teng o‘rin; haftalik reyting shu haftadagi to‘g‘ri javoblar yig‘indisi bo‘yicha.
+mock reytingi, topshirmaganlar va **kunlik reyting**ni guruhga chiqaradi.
+Kunlik reyting faqat shu kuni tugagan testlarni jamlaydi. **Haftalik yakun** oldingi
+dushanba–yakshanba uchun keyingi dushanba **00:00 Toshkent vaqti**dan boshlab bir marta
+yuboriladi. Bot vaqtincha ishlamasa, tiklanganda eng so‘nggi tugagan hafta hisoboti yuboriladi.
+Teng ball — teng o‘rin. O‘chirilgan MOCKlar hisobga kirmaydi.
 Boshlanishiga 10 minut qolganda guruhga bir marta eslatma chiqadi; bu sana bilan
 rejalashtirilgan va haftalik mocklar uchun avtomatik ishlaydi. Test 10 minutdan kam
 vaqtga rejalashtirilsa, keyingi tekshiruvda qolgan minutlar ko‘rsatiladi. Tekshiruv har
@@ -68,7 +71,9 @@ Guruh ulanishini `/uzish` bilan to‘xtatish mumkin. Bu tugallanmagan mocklarni 
 ## Xotira va ruxsatlar
 
 - O‘quvchining javob rasmi RAM’da o‘qiladi; disk/Storage’ga va profilga rasm havolasi yozilmaydi.
-- Javoblar, ball va xatolar tarixi saqlanadi. Telegram chatidagi rasm o‘chirilmaydi.
+- Javoblar, ball va xatolar tarixi MOCK o‘chirilguncha saqlanadi. Admin MOCKni o‘chirsa,
+  uning barcha nusxalari, javoblari, urinishlari va natijalari ham o‘chadi; ilova ro‘yxati
+  va tahlildan yo‘qoladi. Telegramga avval yuborilgan xabarlar avtomatik tahrirlanmaydi.
 - Admin yuklagan savollar fayllari qayta yuborish uchun Telegram file_id ko‘rinishida saqlanadi.
 - Rasm o‘qish: foydalanuvchiga kuniga 15 ta, 6 MB gacha. Matnli topshirish AI talab qilmaydi.
 - Kalit rasm bilan kiritilsa admin tekshirib tasdiqlaydi. Guruhga yuboriladigan savollar fayliga kalitni qo‘shmang.
@@ -93,7 +98,8 @@ npm run build:edge
 
 Yangi loyiha: avval `supabase/sql/schema.sql`, keyin
 `supabase/migrations/20261115072715_biology_mock.sql`,
-`supabase/migrations/20261115085124_biology_import.sql`, Vault va cron sozlamalari.
+`supabase/migrations/20261115085124_biology_import.sql`,
+`supabase/migrations/20261116144055_biology_delete_results.sql`, Vault va cron sozlamalari.
 Mavjud bazada faqat hali qo‘llanmagan migratsiyalarni bajaring.
 Edge Function nomi va webhook URL o‘zgarmaydi: `enzo-bot`.
 `npm start` eski MongoDB/ENZO serveri bo‘lib qolgan; biologiya botini u orqali ishga tushirmang.

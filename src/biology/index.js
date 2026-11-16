@@ -324,7 +324,7 @@ function createBot(options = {}) {
   bot.callbackQuery(/^br:([a-f\d]{6})$/, async ctx => { await ctx.answerCallbackQuery(); return showReview(ctx, ctx.match[1]); });
   bot.hears(B.rank, async ctx => {
     const p = await service.profile(ctx.from), groups = await Group.find({ _id: { $in: p.group_ids }, enabled: true });
-    for (const g of groups) await sendReport(ctx.api, ctx.chat.id, `<b>${esc(g.title)}</b>\n` + await service.weeklyText(g._id, new Date()));
+    for (const g of groups) await sendReport(ctx.api, ctx.chat.id, `<b>${esc(g.title)}</b>\n` + await service.dailyText(g._id, new Date()));
     if (!groups.length) return ctx.reply('Avval guruhda «Qatnashaman» tugmasini bosing.');
   });
   bot.hears(B.help, ctx => ctx.reply('1. Guruhda «Qatnashaman» bosing.\n2. Mockni muddatida ishlang.\n3. Botga yoki guruhdagi mock xabariga javob qilib javoblaringizni yuboring va tasdiqlang.\n4. Umumiy muddat tugagach natija, guruh reytingi va Natijalarim → Tahlil ochiladi.\nRasm aniq o‘qilmasa: 1A 2B 3C … matnidan foydalaning.\nAdmin: botni guruhga admin qiling → /ulash.'));
