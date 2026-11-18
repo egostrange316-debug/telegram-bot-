@@ -8,8 +8,10 @@ const fs = require('node:fs');
   await db.exec(fs.readFileSync('supabase/migrations/20261115072715_biology_mock.sql','utf8'));
   await db.exec(fs.readFileSync('supabase/migrations/20261115085124_biology_import.sql','utf8'));
   await require('../tests/deletion-migration')(db, fs.readFileSync('supabase/migrations/20261116144055_biology_delete_results.sql','utf8'));
+  await require('../tests/daily-migration')(db,fs.readFileSync('supabase/migrations/20261118140357_biology_daily_rooms.sql','utf8'));
   await db.exec('set role service_role');
   const rpc = async (name, args = {}) => {
+    if(name==='bio_room_action'){const r=await db.query('select public.bio_room_action($1,$2,$3::jsonb) as result',[args.p_user,args.p_action,JSON.stringify(args.p_payload)]);return r.rows[0].result;}
     if(name==='bio_delete_package'){const r=await db.query('select public.bio_delete_package($1) as result',[args.p_package_id]);return r.rows[0].result;}
     if (name === 'bio_begin' || name === 'bio_submit_v2') {
       const start = name === 'bio_begin';

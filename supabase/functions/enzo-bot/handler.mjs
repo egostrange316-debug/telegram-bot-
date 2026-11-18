@@ -77,7 +77,7 @@ export function createHandler({ runtime, rpc, waitUntil, clock = Date.now, logge
   return async req => {
     const path = new URL(req.url).pathname;
     if (req.method === 'GET' && path.endsWith('/health')) return json({ ok: true, service: 'biology-mock-bot' });
-    if (/\/api\/(session|list|start|submit|review)$/.test(path)) {
+    if (/\/api\/(session|list|start|submit|review|results|room-create|room-join|room-start|room-leave|room-state)$/.test(path)) {
       try { await initialize(); return await runtime.handleApi(req); } catch { return json({error:'Temporarily unavailable'},503); }
     }
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);

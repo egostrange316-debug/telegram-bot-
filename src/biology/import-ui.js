@@ -8,7 +8,7 @@ const catalog=require('./catalog');
 const service=require('./service');
 const { InputError,esc,answerText,localTime }=require('./domain');
 const { sendReport }=require('../lib/delivery');
-const C={upload:'📥 MOCK yuklash',all:'📚 Barcha MOCKlar',edit:'📝 MOCKni tahrirlash',remove:'🗑 MOCKni o‘chirish',send:'📤 Guruhga yuborish',results:'📊 Natijalar',rank:'🏆 Leaderboard',key:'🔑 Javoblar kaliti',retake:'🔄 Qayta topshirishga ruxsat'};
+const C={rename:'🏷 Nom va mavzu',upload:'📥 MOCK yuklash',all:'📚 Barcha MOCKlar',edit:'📝 MOCKni tahrirlash',remove:'🗑 MOCKni o‘chirish',send:'📤 Guruhga yuborish',results:'📊 Natijalar',rank:'🏆 Leaderboard',key:'🔑 Javoblar kaliti',retake:'🔄 Qayta topshirishga ruxsat'};
 async function list(ctx,action='view',page=0) {
   const rows=await Package.find({status:{$ne:'deleted'}}).sort({createdAt:-1}).limit(1000);
   const kb=new InlineKeyboard();
@@ -21,6 +21,7 @@ async function card(ctx,p) {
   const kb=new InlineKeyboard().text('👁 Savollarni ko‘rish',`cq:${p._id}:0`).row().text('🔑 Kalit',`cp:key:${p._id}`).row();
   if(p.status==='draft')kb.text('✅ Qoralamani tasdiqlash',`ca:${p._id}`).row().text('📝 Tahrirlash',`cp:edit:${p._id}`);
   else kb.text('📤 Guruhga yuborish',`cp:send:${p._id}`);
+  kb.row().text('🏷 Nom va mavzu',`cp:label:${p._id}`);
   return ctx.reply(`${p.title}\n${p.mock_id} · v${p.version}\n${p.grade}-sinf · ${p.question_count} savol\nMavzular: ${p.topics.join(', ')}\nHolat: ${p.status==='draft'?'Qoralama — hali o‘quvchilarga ochilmagan':'Tasdiqlangan'}\n${p.import_notes?.length ? '\n'+p.import_notes.join('\n')+'\n' : ''}\nSavollar va kalitni ko‘rib, tasdiqlang. HTML xavfsiz test oynasida avtomatik tuziladi.`,{reply_markup:kb});
 }
 async function choosePackage(ctx,packages,editId) {
@@ -40,12 +41,13 @@ function registerImportUI(bot,{admin,showGroups,menu,download=downloadImport}) {
     clearSession(ctx.from.id);await ctx.answerCallbackQuery();await menu(ctx,'✅ Tanlangan MOCK qoralamaga saqlandi.');await card(ctx,p);
     if(remaining.length&&!s.data.edit_id)return choosePackage(ctx,remaining);
   });
-  for(const [name,action] of [['all','view'],['edit','edit'],['remove','remove'],['send','send'],['key','key']])bot.hears(C[name],async ctx=>{await admin(ctx);clearSession(ctx.from.id);return list(ctx,action);});
-  bot.callbackQuery(/^cl:(view|edit|remove|send|key):(\d{1,2})$/,async ctx=>{await admin(ctx);await ctx.answerCallbackQuery();return list(ctx,ctx.match[1],Number(ctx.match[2]));});
-  bot.callbackQuery(/^cp:(view|edit|remove|send|key):([a-f\d]{24})$/,async ctx=>{
+  for(const [name,action] of [['all','view'],['edit','edit'],['remove','remove'],['send','send'],['key','key'],['rename','label']])bot.hears(C[name],async ctx=>{await admin(ctx);clearSession(ctx.from.id);return list(ctx,action);});
+  bot.callbackQuery(/^cl:(view|edit|remove|send|key|label):(\d{1,2})$/,async ctx=>{await admin(ctx);await ctx.answerCallbackQuery();return list(ctx,ctx.match[1],Number(ctx.match[2]));});
+  bot.callbackQuery(/^cp:(view|edit|remove|send|key|label):([a-f\d]{24})$/,async ctx=>{
     await admin(ctx);const [_,action,id]=ctx.match,p=await Package.findById(id);
     if(!p||p.status==='deleted')throw new InputError('MOCK topilmadi.'); await ctx.answerCallbackQuery();
     if(action==='view')return card(ctx,p);
+    if(action==='label'){setSession(ctx.from.id,{step:'import_label',data:{package_id:p._id}});return ctx.reply(`Yangi MOCK nomini yuboring. Hozirgi nom: ${p.title}`);}
     if(action==='key')return sendReport(ctx.api,ctx.chat.id,`🔑 <b>${esc(p.mock_id)} v${p.version}</b>\n`+p.questions.map((q,i)=>`${esc(q.question_id)}: ${p.answer_key[i]}`).join('\n'));
     if(action==='edit'){
       if(p.status!=='draft')throw new InputError('Tasdiqlangan versiya o‘zgarmaydi. JSONdagi version sonini oshirib yangi MOCK yuklang.');
@@ -64,7 +66,7 @@ function registerImportUI(bot,{admin,showGroups,menu,download=downloadImport}) {
     return ctx.reply(`${i+1}/${p.question_count} · ${q.question_id}\n${q.text}\n\n${Object.entries(q.options).map(([k,v])=>`${k}) ${v}`).join('\n')}\n\nAdmin kaliti: ${p.answer_key[i]}`,{reply_markup:kb});
   });
   bot.hears([C.results,C.rank],async ctx=>{
-    await admin(ctx);const rows=await Mock.find({status:{$in:['open','closed']}}).sort({starts_at:-1}).limit(30);const kb=new InlineKeyboard();
+    await admin(ctx);const rows=await Mock.find({status:{$in:['open','closed','daily']},kind:{$ne:'room'}}).sort({starts_at:-1}).limit(30);const kb=new InlineKeyboard();
     for(const m of rows)kb.text(`${m.title.slice(0,35)} · #${m.code}`,`cr:${m._id}`).row();
     return ctx.reply(rows.length?'Natija va leaderboard uchun MOCKni tanlang:':'Hali ochilgan mock yo‘q.',{reply_markup:kb});
   });
@@ -77,6 +79,18 @@ function registerImportUI(bot,{admin,showGroups,menu,download=downloadImport}) {
   bot.callbackQuery(/^ct:([a-f\d]{6})$/,async ctx=>{await admin(ctx);setSession(ctx.from.id,{step:'import_retake',data:{code:ctx.match[1]}});await ctx.answerCallbackQuery();return ctx.reply('Qayta topshiradigan o‘quvchining Telegram ID raqamini yuboring.');});
   bot.use(async(ctx,next)=>{
     const s=getSession(ctx.from.id);if(!ctx.message || !s?.step?.startsWith('import_'))return next();await admin(ctx);
+    if(s.step==='import_label'){
+      const title=ctx.message.text?.trim();if(!title||title.length>100)throw new InputError('Nom 1–100 belgi bo‘lsin.');
+      s.data.title=title;s.step='import_topics';setSession(ctx.from.id,s);return ctx.reply('Mavzuni yuboring. Masalan: Hujayra, Fotosintez yoki 50–59-mavzular.');
+    }
+    if(s.step==='import_topics'){
+      const text=ctx.message.text?.trim();if(!text||text.length>250)throw new InputError('Mavzu 1–250 belgi bo‘lsin.');
+      const topics=text.split(',').map(x=>x.trim()).filter(Boolean);
+      const p=await Package.findOneAndUpdate({_id:s.data.package_id,status:{$ne:'deleted'}},{$set:{title:s.data.title,topics}},{new:true});
+      if(!p)throw new InputError('MOCK o‘chirilgan.');
+      await Mock.updateMany({package_id:p._id,status:{$ne:'deleted'}},{$set:{title:p.title,topics}});
+      clearSession(ctx.from.id);return card(ctx,p);
+    }
     if(s.step==='import_file'){
       const imported=await download(ctx.api,ctx.message.document,config.BOT_TOKEN);
       if(imported.packages)return choosePackage(ctx,imported.packages,s.data.edit_id);

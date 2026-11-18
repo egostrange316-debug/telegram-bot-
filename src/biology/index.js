@@ -2,13 +2,14 @@ const { Bot, Keyboard, InlineKeyboard } = require('grammy');
 const { randomBytes } = require('crypto');
 const config = require('../config');
 const { BioProfile: Profile, BioGroup: Group, BioMock: Mock, BioSubmission: Submission } = require('../storage/postgres');
-const { persistentSession, getSession, setSession, clearSession, materialFromMessage } = require('../bot/common');
+const { persistentSession, getSession, setSession, clearSession, materialFromMessage, sendMaterial } = require('../bot/common');
 const { sendReport, messageChunks } = require('../lib/delivery');
 const { InputError, esc, parseAnswers, answerText, localTime, parseLocal, isMember } = require('./domain');
 const service = require('./service');
 const { readSheet } = require('./answer-reader');
 const { C, registerImportUI, registerQuizUI } = require('./import-ui');
 const catalog = require('./catalog');
+const {windowFor,isOpen,releaseAt}=require('./timing');
 const B = { mocks: '🧬 Mocklar', answer: '📝 Javob topshirish', results: '📊 Natijalarim', rank: '🏆 Reyting', help: 'ℹ️ Yordam',
   create: '➕ Mock yaratish', bank: '📚 Mocklar navbati', groups: '⚙️ Guruh sozlamalari', student: '🎓 O‘quvchi rejimi', admin: '🛠 Admin rejimi', done: '✅ Fayllar tayyor' };
 const commands = [ ['start', 'Boshlash'], ['menu', 'Asosiy menyu'], ['mock', 'Mocklar'], ['javob', 'Mock javoblarini topshirish'],
@@ -16,7 +17,7 @@ const commands = [ ['start', 'Boshlash'], ['menu', 'Asosiy menyu'], ['mock', 'Mo
 const days = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
 function keyboard(p, id) {
   const kb = new Keyboard();
-  if (service.isOwner(id) && p.mode === 'admin') kb.text(C.upload).text(C.all).row().text(C.edit).text(C.remove).row().text(C.send).text(C.key).row().text(C.results).text(C.rank).row().text(C.retake).row().text(B.create).text(B.bank).row().text(B.groups).row().text(B.student);
+  if (service.isOwner(id) && p.mode === 'admin') kb.text(C.upload).text(C.all).row().text(C.rename).row().text(C.edit).text(C.remove).row().text(C.send).text(C.key).row().text(C.results).text(C.rank).row().text(C.retake).row().text(B.create).text(B.bank).row().text(B.groups).row().text(B.student);
   else {
     kb.text(B.mocks).text(B.answer).row().text(B.results).text(B.rank).row().text(B.help);
     if (service.isOwner(id)) kb.row().text(B.admin);
@@ -42,24 +43,25 @@ async function aiAnswers(ctx, file, count, key, reader) {
 async function listMocks(ctx, groupId) {
   const p = await service.profile(ctx.from);
   const groups = await Group.find({ _id: { $in: typeof groupId === 'string' ? p.group_ids.filter(id => id === groupId) : p.group_ids }, enabled: true });
-  const mocks = await Mock.find({ group_id: { $in: groups.map(g => g._id) }, status: { $in: ['scheduled', 'opening', 'open'] }, ends_at: { $gt: new Date() } }).sort({ starts_at: 1 }).limit(30);
+  const mocks = await Mock.find({ group_id: { $in: groups.map(g => g._id) }, kind:{$ne:'room'}, $or:[{status:'daily'},{status:{$in:['scheduled','opening','open']},ends_at:{$gt:new Date()}}] }).sort({ starts_at: 1 }).limit(30);
   if (!mocks.length) return ctx.reply('Hozir ochiq mock yo‘q. Guruhdagi «Qatnashaman» tugmasi orqali ro‘yxatdan o‘ting.');
   const kb = new InlineKeyboard();
-  for (const m of mocks) kb.text(`${m.status === 'open' ? '🟢' : '🕒'} ${m.title.slice(0, 35)} · ${m.count}`, `bm:${m.code}`).row();
+  for (const m of mocks) kb.text(`${isOpen(m) ? '🟢' : '🕒'} ${m.title.slice(0, 35)} · ${m.count}`, `bm:${m.code}`).row();
   return ctx.reply('Mockni tanlang:', { reply_markup: kb });
 }
 async function enrollForMock(ctx, code) {
-  const m = await Mock.findOne({ code });
-  if (!m || !['scheduled', 'opening', 'open'].includes(m.status) || new Date(m.ends_at) <= new Date()) throw new InputError('Bu mock ochiq emas yoki muddati tugagan.');
+  let m = await Mock.findOne({ code });
+  if (!m || m.room_id || !['daily','scheduled', 'opening', 'open'].includes(m.status) || m.status!=='daily'&&new Date(m.ends_at) <= new Date()) throw new InputError('Bu mock ochiq emas yoki muddati tugagan.');
+  m={...m,...windowFor(m)};
   const group = await Group.findById(m.group_id);
   if (ctx.chat.type !== 'private' && group?.chat_id !== ctx.chat.id) throw new InputError('Guruh mos kelmadi.');
   await service.enroll(ctx.api, ctx.from, group);
-  return m;
+  return {...m,...windowFor(m)};
 }
 async function joinGroup(ctx, id) {
   const group = await Group.findById(id);
   await service.enroll(ctx.api, ctx.from, group);
-  const active = await Mock.find({ group_id: id, status: 'open', starts_at: { $lte: new Date() }, ends_at: { $gt: new Date() } }).limit(2);
+  const active = await Mock.find({ group_id:id,kind:{$ne:'room'},$or:[{status:'daily'},{status:'open',starts_at:{$lte:new Date()},ends_at:{$gt:new Date()}}]}).limit(2);
   if (active.length === 1) return selectMock(ctx, active[0].code);
   if (active.length > 1) return listMocks(ctx, id);
   const upcoming = await Mock.find({ group_id: id, status: { $in: ['scheduled', 'opening'] }, ends_at: { $gt: new Date() } }).sort({ starts_at: 1 }).limit(1);
@@ -68,10 +70,13 @@ async function joinGroup(ctx, id) {
 }
 async function selectMock(ctx, code) {
   const completed = await Mock.findOne({ code });
-  if (catalog.reviewReady(completed)) return showReview(ctx, code);
+  const saved=completed&&await Submission.findOne({mock_id:completed._id,telegram_id:ctx.from.id});
+  const retake=saved&&await require('../storage/postgres').BioAttempt.findOne({mock_id:completed._id,telegram_id:ctx.from.id,$or:[{retake_allowed:true},{state:'active'}]});
+  if(saved&&!retake){if(catalog.reviewReady(completed,Date.now(),saved))return showReview(ctx,code);return ctx.reply(`✅ Javoblaringiz saqlangan. Natija ${localTime(releaseAt(completed,saved))} da ochiladi.`);}
   const m = await enrollForMock(ctx, code);
   clearSession(ctx.from.id);
-  if (m.status !== 'open' || new Date(m.starts_at) > new Date()) {
+  if (!isOpen(m)) {
+    if(m.status==='daily')return ctx.reply(`🧬 ${m.title}\nMOCKlar har kuni 07:00–22:00 ochiq. Natijalar 22:10 da. (Toshkent)`);
     return ctx.reply(`✅ Qatnashchilar ro‘yxatiga qo‘shildingiz.\n\n🧬 ${m.title}\n🕒 Boshlanish: ${localTime(m.starts_at)} (Toshkent).\nTest hali boshlanmagan. Vaqti kelganda quyidagi tugmani bosing.`, {
       reply_markup: new InlineKeyboard().text('🔄 Testni ochish', `bm:${m.code}`),
     });
@@ -88,7 +93,7 @@ async function selectMock(ctx, code) {
   }
   service.accepted(await service.begin(m,ctx.from));
   setSession(ctx.from.id, { step: 'bio_answer', data: { mock_id: m._id } });
-  return ctx.reply(`📝 ${m.title} · #${m.code}\n${m.count} javobni raqamlab yuboring: 1A 2B 3C … yoki javob varaqasining rasmini yuboring.\nBo‘sh javob: -. Oxirgi muddat: ${localTime(m.ends_at)} (Toshkent).\nNatija va tahlil mockning umumiy vaqti tugagach ochiladi.`);
+  return ctx.reply(`📝 ${m.title} · #${m.code}\n${m.count} javobni raqamlab yuboring: 1A 2B 3C … yoki javob varaqasining rasmini yuboring.\nBo‘sh javob: -. Oxirgi muddat: ${localTime(m.ends_at)} (Toshkent).\nNatija va tahlil 22:10 da ochiladi.`);
 }
 function reviewUrl(runId) {
   const url = new URL(config.MINIAPP_URL); url.searchParams.set('run', runId); url.searchParams.set('mode', 'review');
@@ -104,7 +109,8 @@ async function showReview(ctx, code) {
   return sendReport(ctx.api, ctx.chat.id, text);
 }
 async function prepareAnswer(ctx, m, text, reader) {
-  if (!m || m.status !== 'open' || new Date(m.starts_at) > new Date() || new Date(m.ends_at) <= new Date()) throw new InputError('Javob qabul qilish muddati tugagan yoki mock boshlanmagan.');
+  if (!m || !isOpen(m)) throw new InputError('Javob qabul qilish muddati tugagan yoki mock boshlanmagan.');
+  m={...m,...windowFor(m)};
   const group = await Group.findById(m.group_id);
   if (ctx.chat.type !== 'private' && group?.chat_id !== ctx.chat.id) throw new InputError('Bu mock boshqa guruhga tegishli.');
   await service.enroll(ctx.api, ctx.from, group);
@@ -124,7 +130,7 @@ async function personalResults(ctx) {
   const kb = new InlineKeyboard();
   const texts = rows.filter(r => byId.has(r.mock_id)).map(r => {
     const m = byId.get(r.mock_id);
-    if (!catalog.reviewReady(m)) return `🧬 <b>${esc(m.title)}</b> · #${m.code}\n✅ Javoblaringiz saqlandi.\n🔒 Natija va tahlil ${localTime(m.ends_at)} (Toshkent) dan keyin ochiladi.`;
+    if (!catalog.reviewReady(m,Date.now(),r)) return `🧬 <b>${esc(m.title)}</b> · #${m.code}\n✅ Javoblaringiz saqlandi.\n🔒 Natija va tahlil ${localTime(releaseAt(m,r))} (Toshkent) dan keyin ochiladi.`;
     if (config.MINIAPP_URL) kb.webApp(`🔍 Tahlil · ${m.title.slice(0, 35)}`, reviewUrl(m._id)).row();
     else kb.text(`🔍 Tahlil · ${m.title.slice(0, 35)}`, `br:${m.code}`).row();
     return `🧬 <b>${esc(m.title)}</b> · #${m.code}\n${r.correct}/${r.total} (${r.percent}%) · bo‘sh: ${r.blank}\n` +
@@ -148,16 +154,14 @@ async function groupSettings(ctx, id) {
   await admin(ctx);
   const g = await Group.findById(id);
   if (!g?.enabled) throw new InputError('Guruh ulanmagan.');
-  return ctx.reply(`${g.title}\nHaftalik 50 talik mock: ${g.weekly_enabled ? 'yoqilgan' : 'o‘chiq'}\n${days[g.weekday]} ${g.time}, ${g.duration} daqiqa (Toshkent).\nFaqat navbatga yuklangan yangi 50 savollik mock yuboriladi.`, {
-    reply_markup: new InlineKeyboard().text(g.weekly_enabled ? '⏸ Jadvalni o‘chirish' : '▶️ Jadvalni yoqish', `bgt:${id}`).row().text('🕒 Vaqtni o‘zgartirish', `bgs:${id}`),
-  });
+  return ctx.reply(`${g.title}\nMOCKlar har kuni 07:00–22:00 ochiq.\nNatijalar 22:10 da ilovada ochiladi.\nGuruhga natijani ko‘rish tugmasi yuboriladi. Barcha vaqtlar Toshkent bo‘yicha.`);
 }
 async function wizardPreview(ctx, s) {
   const g = await Group.findById(s.data.group_id);
-  const when = s.data.plan === 'weekly' ? 'Haftalik 50 talik navbatga' : s.data.plan === 'now' ? `Yaqin daqiqada, ${g.duration} daqiqa` : `${localTime(s.data.starts_at)} — ${s.data.ends_at ? localTime(s.data.ends_at) : `${g.duration} daqiqa`}`;
+  const when = 'Har kuni 07:00–22:00 · Natijalar 22:10';
   s.step = 'bio_publish'; setSession(ctx.from.id, s);
-  return ctx.reply(`Tayyor mock:\n${s.data.title}\nSavollar: ${s.data.count}\nFayllar: ${s.data.materials.length}\nGuruh: ${g.title}\nVaqt: ${when}\n\nTasdiqlangach kalit va fayllar o‘zgarmaydi.`, {
-    reply_markup: new InlineKeyboard().text('✅ Saqlash va rejalashtirish', `bpub:${s.data._id}`),
+  return ctx.reply(`Tayyor mock:\n${s.data.title}\nSavollar: ${s.data.count}\nMavzu: ${(s.data.topics||[]).join(', ')}\nFayllar: ${s.data.materials.length}\nGuruh: ${g.title}\nVaqt: ${when}\n\nTasdiqlangach kalit va fayllar o‘zgarmaydi.`, {
+    reply_markup: new InlineKeyboard().text('✅ Saqlash va ochish', `bpub:${s.data._id}`),
   });
 }
 async function wizardMessage(ctx, s, reader) {
@@ -192,12 +196,14 @@ async function wizardMessage(ctx, s, reader) {
     return ctx.reply(`Javob kaliti:\n${answerText(s.data.answer_key)}\n\nTekshirib tasdiqlang. O‘zgartirish uchun kalitni qayta yuboring.`, { reply_markup: new InlineKeyboard().text('✅ Kalit to‘g‘ri', `bk:${s.data._id}`) });
   }
   if (s.step === 'bio_key_confirm') { s.step = 'bio_key'; return wizardMessage(ctx, s, reader); }
-  if (s.step === 'bio_date') {
-    const parts = text.split(' / ');
-    const date = parseLocal(parts[0]);
-    if (parts[1]) { const end = parseLocal(parts[1]); if (end <= date || end-date > 4*3600_000) throw new InputError('Tugash boshlanishdan keyin, 4 soat ichida bo‘lsin.'); s.data.ends_at = end.toISOString(); }
-    if (date <= new Date()) throw new InputError('Kelajakdagi vaqtni kiriting.');
-    s.data.starts_at = date.toISOString(); return wizardPreview(ctx, s);
+  if(s.step==='bio_label'){
+    if(!text||text.length>100)throw new InputError('MOCK nomini 1–100 belgida kiriting.');
+    s.data.title=text==='-'?s.data.title:text;s.step='bio_topics';setSession(ctx.from.id,s);
+    return ctx.reply('Qaysi mavzu? Masalan: Hujayra, Fotosintez yoki 50–59-mavzular.');
+  }
+  if(s.step==='bio_topics'){
+    if(!text||text.length>250)throw new InputError('Mavzuni 1–250 belgida kiriting.');
+    s.data.topics=text.split(',').map(x=>x.trim()).filter(Boolean);s.data.plan='daily';return wizardPreview(ctx,s);
   }
   if (s.step === 'bio_schedule') {
     const match = /^(\d) (\d{2}:\d{2}) (\d{1,3})$/.exec(text);
@@ -228,14 +234,14 @@ function createBot(options = {}) {
     if (!['creator', 'administrator'].includes(owner.status) || !['creator', 'administrator'].includes(me.status)) throw new InputError('Siz ham, bot ham Telegram guruhida admin bo‘lishingiz kerak.');
     const g = await Group.findOneAndUpdate({ chat_id: ctx.chat.id }, { $set: { title: ctx.chat.title, enabled: true } }, { upsert: true, new: true });
     await service.enroll(ctx.api, ctx.from, g);
-    return ctx.reply('🧬 Biologiya mock guruhi ulandi! Har bir a’zo «Qatnashaman» tugmasini bir marta bossin. Haftalik jadval botdagi admin menyusidan yoqiladi.', {
+    return ctx.reply('🧬 Biologiya mock guruhi ulandi! Har bir a’zo «Qatnashaman» tugmasini bir marta bossin. MOCKlar har kuni 07:00–22:00 ochiq, natijalar 22:10 da ilovada ochiladi.', {
       reply_markup: new InlineKeyboard().text('🙋 Qatnashaman', `bj:${g._id}`),
     });
   });
   bot.command('uzish', async ctx => {
     if (!service.isOwner(ctx.from.id) || ctx.chat.type === 'private') return;
     const g = await Group.findOneAndUpdate({ chat_id: ctx.chat.id }, { $set: { enabled: false, weekly_enabled: false } }, { new: true });
-    if (g) await Mock.updateMany({ group_id: g._id, status: { $in: ['queued', 'scheduled', 'opening', 'open'] } }, { $set: { status: 'cancelled' } });
+    if (g) await Mock.updateMany({ group_id: g._id, status: { $in: ['queued', 'scheduled', 'opening', 'open', 'daily'] } }, { $set: { status: 'cancelled' } });
     return ctx.reply('Guruh ulanishi va shu guruhdagi tugallanmagan mocklar to‘xtatildi.');
   });
   bot.command('qatnashaman', async ctx => {
@@ -267,10 +273,10 @@ function createBot(options = {}) {
     const m = await Mock.findById(p.pending.mock_id), g = m && await Group.findById(m.group_id);
     if (ctx.chat.type !== 'private' && ctx.chat.id !== g?.chat_id) throw new InputError('Guruh mos kelmadi.');
     await service.enroll(ctx.api, ctx.from, g);
-    service.accepted(await service.accept(m, ctx.from, p.pending.answers, p.pending.nonce));
+    const result=service.accepted(await service.accept(m, ctx.from, p.pending.answers, p.pending.nonce));
     await Profile.updateOne({ telegram_id: ctx.from.id, 'pending.token': ctx.match[2] }, { $unset: { pending: 1 } });
     await ctx.answerCallbackQuery({ text: '✅ Javoblar qabul qilindi.' });
-    return ctx.editMessageText(`✅ ${service.isOwner(ctx.from.id) ? 'Sizning' : 'O‘quvchining'} javoblari qabul qilindi — #${m.code}.\n🔒 Natija, to‘g‘ri javoblar va tahlil ${localTime(m.ends_at)} (Toshkent) dan keyin ochiladi.\nQayta topshirish uchun admin ruxsati kerak.${ctx.chat.type === 'private' ? '\nVaqt tugagach → Natijalarim.' : ''}`);
+    return ctx.editMessageText(`✅ ${service.isOwner(ctx.from.id) ? 'Sizning' : 'O‘quvchining'} javoblari qabul qilindi — #${m.code}.\n🔒 Natija, to‘g‘ri javoblar va tahlil ${localTime(result.available_at||releaseAt(m))} (Toshkent) dan keyin ochiladi.\nQayta topshirish uchun admin ruxsati kerak.${ctx.chat.type === 'private' ? '\nVaqt tugagach → Natijalarim.' : ''}`);
   });
   bot.command('javob', async ctx => {
     const match = /^([a-f\d]{6})\s+([\s\S]+)$/i.exec(ctx.match.trim());
@@ -296,7 +302,7 @@ function createBot(options = {}) {
     if (ctx.message?.migrate_to_chat_id) { await Group.updateOne({ chat_id: ctx.chat.id }, { $set: { chat_id: ctx.message.migrate_to_chat_id } }); return; }
     if (ctx.message?.reply_to_message) {
       const g = await Group.findOne({ chat_id: ctx.chat.id, enabled: true });
-      const m = g && await Mock.findOne({ group_id: g._id, status: 'open', announcement_id: ctx.message.reply_to_message.message_id });
+      const m = g && await Mock.findOne({ group_id: g._id, status: {$in:['open','daily']}, announcement_id: ctx.message.reply_to_message.message_id });
       if (m) return prepareAnswer(ctx, m, ctx.message.text, reader);
     }
     if (ctx.callbackQuery) return ctx.answerCallbackQuery({ text: 'Botning shaxsiy chatini oching.' });
@@ -305,6 +311,7 @@ function createBot(options = {}) {
   bot.command('start', async ctx => {
     clearSession(ctx.from.id);
     const payload = ctx.match.trim();
+    if(payload==='results')return ctx.reply('📊 Natijalar sana, topshirilgan vaqt va MOCK bo‘yicha tartiblangan.',{reply_markup:new InlineKeyboard().webApp('📊 Natijangizni ko‘rish',config.MINIAPP_URL+'?tab=results')});
     if (/^g_[a-f\d]{24}$/.test(payload)) return joinGroup(ctx, payload.slice(2));
     if (/^r_[a-f\d]{6}$/.test(payload)) return showReview(ctx, payload.slice(2));
     if (/^m_[a-f\d]{6}$/.test(payload)) return selectMock(ctx, payload.slice(2));
@@ -322,37 +329,24 @@ function createBot(options = {}) {
   bot.callbackQuery(/^bm:([a-f\d]{6})$/, async ctx => { await ctx.answerCallbackQuery(); return selectMock(ctx, ctx.match[1]); });
   bot.command('natijalar', personalResults); bot.hears(B.results, personalResults);
   bot.callbackQuery(/^br:([a-f\d]{6})$/, async ctx => { await ctx.answerCallbackQuery(); return showReview(ctx, ctx.match[1]); });
-  bot.hears(B.rank, async ctx => {
-    const p = await service.profile(ctx.from), groups = await Group.find({ _id: { $in: p.group_ids }, enabled: true });
-    for (const g of groups) await sendReport(ctx.api, ctx.chat.id, `<b>${esc(g.title)}</b>\n` + await service.dailyText(g._id, new Date()));
-    if (!groups.length) return ctx.reply('Avval guruhda «Qatnashaman» tugmasini bosing.');
-  });
-  bot.hears(B.help, ctx => ctx.reply('1. Guruhda «Qatnashaman» bosing.\n2. Mockni muddatida ishlang.\n3. Botga yoki guruhdagi mock xabariga javob qilib javoblaringizni yuboring va tasdiqlang.\n4. Umumiy muddat tugagach natija, guruh reytingi va Natijalarim → Tahlil ochiladi.\nRasm aniq o‘qilmasa: 1A 2B 3C … matnidan foydalaning.\nAdmin: botni guruhga admin qiling → /ulash.'));
+  bot.hears(B.rank,ctx=>ctx.reply('📊 Kunlik va haftalik natijalarni ilovada ko‘ring.',{reply_markup:new InlineKeyboard().webApp('📊 Natijalar',config.MINIAPP_URL+'?tab=results')}));
+  bot.hears(B.help,ctx=>ctx.reply('1. Guruhda «Qatnashaman» bosing.\n2. MOCKlar har kuni 07:00–22:00 ochiq. Nom va mavzu bo‘yicha tanlang.\n3. Oddiy natija va tahlil 22:10 da ilovada ochiladi.\n4. Musobaqa bo‘limida 2–3 kishilik xona yarating yoki kod bilan qo‘shiling. Hamma topshirgach g‘olib chiqadi.\nBarcha vaqtlar Toshkent bo‘yicha.'));
   bot.hears(B.create, async ctx => { await admin(ctx); setSession(ctx.from.id, { step: 'bio_title', data: { _id: randomBytes(12).toString('hex') } }); return ctx.reply('Yangi biologiya mock nomini yuboring. /cancel — bekor qilish.'); });
   bot.hears(B.groups, ctx => showGroups(ctx));
   bot.hears(B.bank, async ctx => {
     await admin(ctx);
-    const mocks = await Mock.find({}).sort({ createdAt: -1 }).limit(30);
+    const mocks = await Mock.find({status:{$ne:'deleted'},kind:{$ne:'room'}}).sort({ createdAt: -1 }).limit(30);
     const kb = new InlineKeyboard();
-    for (const m of mocks) if (['queued', 'scheduled'].includes(m.status)) kb.text(`Bekor qilish: ${m.title.slice(0, 30)}`, `bdel:${m._id}`).row();
+    for (const m of mocks) if (['queued', 'scheduled', 'daily'].includes(m.status)) kb.text(`Bekor qilish: ${m.title.slice(0, 30)}`, `bdel:${m._id}`).row();
     await sendReport(ctx.api, ctx.chat.id, mocks.map(m => `#${m.code} · ${esc(m.title)} · ${m.count} · ${esc(m.status)}${m.starts_at ? ` · ${localTime(m.starts_at)}` : ''}`).join('\n') || 'Mocklar navbati bo‘sh.');
     if (kb.inline_keyboard.length) return ctx.reply('Boshlanmagan mockni navbatdan olib tashlash:', { reply_markup: kb });
   });
   bot.callbackQuery(/^bdel:([a-f\d]{24})$/, async ctx => {
-    await admin(ctx); await Mock.updateOne({ _id: ctx.match[1], status: { $in: ['queued', 'scheduled'] } }, { $set: { status: 'cancelled' } });
+    await admin(ctx); await Mock.updateOne({ _id: ctx.match[1], status: { $in: ['queued', 'scheduled', 'daily'] } }, { $set: { status: 'cancelled' } });
     return ctx.answerCallbackQuery({ text: 'Boshlanmagan mock bekor qilindi.' });
   });
   bot.callbackQuery(/^bg:([a-f\d]{24})$/, async ctx => { await ctx.answerCallbackQuery(); return groupSettings(ctx, ctx.match[1]); });
-  bot.callbackQuery(/^bgt:([a-f\d]{24})$/, async ctx => {
-    await admin(ctx); const g = await Group.findById(ctx.match[1]);
-    if (!g?.enabled) throw new InputError('Guruh ulanmagan.');
-    await Group.updateOne({ _id: g._id }, { $set: { weekly_enabled: !g.weekly_enabled } });
-    await ctx.answerCallbackQuery(); return groupSettings(ctx, g._id);
-  });
-  bot.callbackQuery(/^bgs:([a-f\d]{24})$/, async ctx => {
-    await admin(ctx); setSession(ctx.from.id, { step: 'bio_schedule', data: { group_id: ctx.match[1] } });
-    await ctx.answerCallbackQuery(); return ctx.reply('Kun, vaqt va daqiqa yuboring: 0 20:00 90\n0=yakshanba, 1=dushanba, 2=seshanba, 3=chorshanba, 4=payshanba, 5=juma, 6=shanba. Toshkent vaqti.');
-  });
+  bot.callbackQuery(/^bg[ts]:([a-f\d]{24})$/,async ctx=>{await admin(ctx);await ctx.answerCallbackQuery();return groupSettings(ctx,ctx.match[1]);});
   bot.callbackQuery(/^bk:([a-f\d]{24})$/, async ctx => {
     await admin(ctx); const s = getSession(ctx.from.id);
     if (s?.step !== 'bio_key_confirm' || s.data._id !== ctx.match[1]) throw new InputError('Kalit tasdig‘i eskirgan.');
@@ -361,33 +355,28 @@ function createBot(options = {}) {
   bot.callbackQuery(/^bgpick:([a-f\d]{24})$/, async ctx => {
     await admin(ctx); const s = getSession(ctx.from.id), g = await Group.findById(ctx.match[1]);
     if (s?.step !== 'bio_group' || !g?.enabled) throw new InputError('Mock yoki guruh tanlovi eskirgan.');
-    s.data.group_id = g._id; s.step = 'bio_plan'; setSession(ctx.from.id, s);
-    const kb = new InlineKeyboard();
-    if (s.data.count === 50) kb.text('📅 Haftalik navbatga', 'bp:weekly').row();
-    kb.text('▶️ Hozir boshlash', 'bp:now').row().text('🕒 Sana belgilash', 'bp:date');
-    await ctx.answerCallbackQuery(); return ctx.reply('Mockni qachon yuboramiz?', { reply_markup: kb });
+    s.data.group_id = g._id; s.step = 'bio_label'; setSession(ctx.from.id, s);
+    await ctx.answerCallbackQuery(); return ctx.reply(`O‘quvchilar ko‘radigan MOCK nomini yuboring.\nHozirgi nom: ${s.data.title}\nShu nomni qoldirish uchun - yuboring.`);
   });
-  bot.callbackQuery(/^bp:(weekly|now|date)$/, async ctx => {
-    await admin(ctx); const s = getSession(ctx.from.id);
-    if (s?.step !== 'bio_plan') throw new InputError('Bu tanlov eskirgan.');
-    if (ctx.match[1] === 'weekly' && s.data.count !== 50) throw new InputError('Haftalik mock 50 savollik bo‘lsin.');
-    s.data.plan = ctx.match[1]; await ctx.answerCallbackQuery();
-    if (s.data.plan !== 'date') return wizardPreview(ctx, s);
-    s.step = 'bio_date'; setSession(ctx.from.id, s); return ctx.reply('Boshlanish / tugash: YYYY-MM-DD HH:mm / YYYY-MM-DD HH:mm\nMasalan: 2026-11-22 20:00 / 2026-11-22 21:30 (Toshkent).\nFaqat boshlanish berilsa, guruhdagi davomiylik olinadi.');
-  });
+  bot.callbackQuery(/^bp:(weekly|now|date)$/,async ctx=>{await admin(ctx);await ctx.answerCallbackQuery();return ctx.reply('Vaqt tanlash olib tashlangan. MOCKni qayta tanlang: har kuni 07:00–22:00 ochiq bo‘ladi.');});
   bot.callbackQuery(/^bpub:([a-f\d]{24})$/, async ctx => {
     await admin(ctx); const s = getSession(ctx.from.id);
     if (s?.step !== 'bio_publish' || s.data._id !== ctx.match[1]) throw new InputError('Bu saqlash tugmasi eskirgan. /menu orqali tekshiring.');
     const d = s.data, g = await Group.findById(d.group_id);
     if (!g?.enabled) throw new InputError('Guruh ulanmagan.');
-    const start = d.plan === 'now' ? new Date(Math.ceil(Date.now() / 60_000) * 60_000) : d.plan === 'date' ? new Date(d.starts_at) : null;
-    if (start && start < new Date()) throw new InputError('Tanlangan boshlanish vaqti o‘tdi. /cancel va qayta yarating.');
     const imported = d.package_id ? catalog.snapshot(await require('../storage/postgres').BioPackage.findById(d.package_id)) : {};
-    if (!await Mock.exists({ _id: d._id })) await Mock.create({ ...imported, _id: d._id, code: randomBytes(3).toString('hex'), title: d.title, count: d.count,
-      materials: d.materials, answer_key: d.answer_key, group_id: g._id, status: start ? 'scheduled' : 'queued',
-      ...(start ? { starts_at: start, ends_at: d.ends_at ? new Date(d.ends_at) : new Date(start.getTime() + g.duration * 60_000) } : {}) });
+    const existing=d.package_id&&await Mock.findOne({package_id:d.package_id,group_id:g._id,status:'daily'});
+    if(existing){d._id=existing._id;await Mock.updateOne({_id:d._id},{$set:{title:d.title,topics:d.topics||[]}});}
+    if (!await Mock.exists({ _id: d._id })) await Mock.create({ ...imported, _id: d._id, code: randomBytes(3).toString('hex'), title: d.title, topics:d.topics||[],count: d.count,
+      materials: d.materials, answer_key: d.answer_key, group_id: g._id, status:'daily',kind:'daily' });
+    await Group.updateOne({_id:g._id},{$set:{daily_mode:true,weekly_enabled:false}});
+    const saved=await Mock.findById(d._id);
+    await service.delivered(`bio:catalog:${saved._id}`,async()=>{const message=await ctx.api.sendMessage(g.chat_id,
+      `🧬 ${saved.title} · #${saved.code}\nMavzu: ${(saved.topics||[]).join(', ')}\n${saved.count} savol · Har kuni 07:00–22:00\nNatijalar 22:10 da ilovada ochiladi.`,
+      {reply_markup:new InlineKeyboard().text('🙋 Qatnashaman',`bjoin:${saved.code}`)});await Mock.updateOne({_id:saved._id},{$set:{announcement_id:message.message_id}});return message;});
+    for(const [i,material] of (saved.materials||[]).entries())await service.delivered(`bio:catalog:${saved._id}:file:${i}`,()=>sendMaterial(ctx.api,g.chat_id,material));
     clearSession(ctx.from.id); await ctx.answerCallbackQuery({ text: 'Mock saqlandi.' });
-    return menu(ctx, start ? `✅ Mock ${localTime(start)} ga rejalashtirildi.` : `✅ 50 savollik mock haftalik navbatga qo‘shildi.${g.weekly_enabled ? '' : ' Guruh sozlamalaridan haftalik jadvalni yoqing.'}`);
+    return menu(ctx,'✅ MOCK qo‘shildi. Har kuni 07:00–22:00 ochiq, natijalar 22:10 da.');
   });
   registerImportUI(bot, {admin, showGroups, menu, download:options.downloadImport});
   bot.on('message', async ctx => {

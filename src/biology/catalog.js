@@ -2,6 +2,7 @@ const { randomBytes } = require('crypto');
 const { BioPackage: Package, BioMock: Mock, BioGroup: Group, BioAttempt: Attempt, BioSubmission: Submission, deleteBiologyPackage } = require('../storage/postgres');
 const { InputError, localTime } = require('./domain');
 const service = require('./service');
+const { windowFor,isOpen,releaseAt }=require('./timing');
 async function savePackage(data, editId) {
   const existing = await Package.findOne({ mock_id:data.mock_id, version:data.version });
   if (editId) {
@@ -19,19 +20,19 @@ async function deletePackage(packageId) {
 }
 function publicMock(m) {
   return { run_id:m._id, mock_id:m.external_mock_id, version:m.version, title:m.title, grade:m.grade, topics:m.topics,
-    question_count:m.count, starts_at:m.starts_at, ends_at:m.ends_at,
+    question_count:m.count, starts_at:m.starts_at, ends_at:m.ends_at, available_at:m.available_at || m.ends_at, room_id:m.room_id,
     questions:m.questions.map(q=>({question_id:q.question_id,source_topic:q.source_topic,source_question_number:q.source_question_number,text:q.text,
       options:{A:q.options.A,B:q.options.B,C:q.options.C,D:q.options.D}})) };
 }
-function reviewReady(m, now = Date.now()) {
-  const end = new Date(m?.ends_at).getTime();
-  return ['open', 'closed'].includes(m?.status) && Number.isFinite(end) && end <= now;
+function reviewReady(m, now = Date.now(), submission) {
+  const end = new Date(releaseAt(m,submission)).getTime();
+  return ['open', 'closed', 'daily'].includes(m?.status) && Number.isFinite(end) && end <= now;
 }
 async function reviewForUser(user, runId) {
   const m = await Mock.findById(runId);
   const submission = m && await Submission.findOne({ mock_id: m._id, telegram_id: user.id });
   if (!submission) throw new InputError('Bu test uchun o‘zingiz topshirgan natija topilmadi.');
-  if (!reviewReady(m)) throw new InputError(`Tahlil testning umumiy vaqti tugagach ochiladi: ${localTime(m.ends_at)} (Toshkent).`);
+  if (!reviewReady(m,Date.now(),submission)) throw new InputError(`Tahlil testning umumiy vaqti tugagach ochiladi: ${localTime(releaseAt(m,submission))} (Toshkent).`);
   if (submission.answers?.length !== m.count || m.answer_key?.length !== m.count) throw new InputError('Bu eski natijaning javoblari to‘liq saqlanmagan.');
   // Only a participant's own accepted submission is readable. Never begin an
   // attempt, enroll, consume retake permission, or change scores in this path.
@@ -49,14 +50,14 @@ async function reviewForUser(user, runId) {
 }
 async function openForUser(api,user,runId) {
   const m = await Mock.findById(runId);
-  if (!m?.questions || m.status!=='open' || new Date(m.starts_at)>new Date() || new Date(m.ends_at)<=new Date()) throw new InputError('Test boshlanmagan, muddati tugagan yoki bu faylli mock.');
+  if (!m?.questions || !isOpen(m)) throw new InputError('Test boshlanmagan, muddati tugagan yoki bu faylli mock.');
   await service.enroll(api,user,await Group.findById(m.group_id));
   const attempt=service.accepted(await service.begin(m,user));
-  return { m, attempt };
+  return { m:{...m,...windowFor(m)}, attempt };
 }
 async function permitRetake(code,userId) {
-  const m=await Mock.findOne({code,status:'open'});
-  if (!m || new Date(m.ends_at)<=new Date()) throw new InputError('Ochiq mock kodini kiriting.');
+  const m=await Mock.findOne({code,status:{$in:['open','daily']}});
+  if (!m || m.room_id || !isOpen(m)) throw new InputError('Ochiq mock kodini kiriting.');
   const s=await Submission.findOne({mock_id:m._id,telegram_id:userId});
   if (!s) throw new InputError('Bu o‘quvchi hali topshirmagan.');
   if ((s.generation || 1)>=5) throw new InputError('Bir mockda eng ko‘pi 5 ta urinish.');

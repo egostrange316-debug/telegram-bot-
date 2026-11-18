@@ -4,6 +4,7 @@ const { BioProfile: Profile, BioGroup: Group, BioMock: Mock, BioSubmission: Subm
 const { deliverOnce, sendReport } = require('../lib/delivery');
 const { sendMaterial } = require('../bot/common');
 const { InputError, esc, answerText, localTime, latestSlot, weekStart, dayStart, rank, isMember, DAY } = require('./domain');
+const { windowFor,releaseAt }=require('./timing');
 const START_REMINDER_MS = 10 * 60_000;
 const ownerId = () => config.ADMIN_IDS[0];
 const isOwner = id => Number.isSafeInteger(id) && id === ownerId();
@@ -18,7 +19,7 @@ async function enroll(api, user, group) {
   if (!isMember(member)) throw new InputError('Avval shu Telegram guruhiga qo‘shiling.');
   await profile(user);
   await Profile.updateOne({ telegram_id: user.id }, { $addToSet: { group_ids: group._id } });
-  await Mock.updateMany({ group_id: group._id, status: { $in: ['opening', 'open'] } }, { $addToSet: { roster: user.id } });
+  await Mock.updateMany({ group_id: group._id, status: { $in: ['opening', 'open'] }, kind:{$ne:'room'} }, { $addToSet: { roster: user.id } });
 }
 async function delivered(key, send) {
   if (await deliverOnce(key, send)) return true;
@@ -29,7 +30,7 @@ async function begin(mock, user) {
   return beginBiology({ p_mock_id: mock._id, p_telegram_id: user.id, p_new_id: randomBytes(12).toString('hex'), p_nonce: randomBytes(16).toString('hex') });
 }
 function accepted(result) {
-  if (!result.ok) throw new InputError(({closed:'Mock boshlanmagan yoki muddati tugagan.',membership:'Guruh a’zoligi tasdiqlanmadi.',already:'Siz topshirgansiz. Qayta topshirishga admin ruxsati kerak.',stale:'Bu urinish eskirgan. Mockni botdan qayta oching.'})[result.reason] || 'Javob qabul qilinmadi.');
+  if (!result.ok) throw new InputError(({closed:'Mock boshlanmagan yoki muddati tugagan.',membership:'Guruh a’zoligi tasdiqlanmadi.',already:'Siz topshirgansiz. Qayta topshirishga admin ruxsati kerak.',stale:'Bu urinish eskirgan. Mockni botdan qayta oching.',busy:'Bu MOCK boshqa ochiq urinish yoki musobaqada band.',room:'Bu musobaqada qatnashish huquqi yo‘q.'})[result.reason] || 'Javob qabul qilinmadi.');
   return result;
 }
 async function accept(mock, user, answers, nonce) {
@@ -62,11 +63,12 @@ async function openMock(api, group, mock, now) {
   await Mock.updateOne({ _id: mock._id, status: 'opening' }, { $set: { status: 'open' } });
 }
 async function periodRows(groupId, start, end, asOf = new Date()) {
-  const mocks = await Mock.find({ group_id: groupId, status: 'closed', ends_at: { $gte: start, $lt: end, $lte: asOf } });
+  const mocks = await Mock.find({ group_id: groupId, status: {$in:['closed','daily','open']} });
   const packages = await Package.find({ _id: { $in: mocks.map(m=>m.package_id).filter(Boolean) }, status: { $ne: 'deleted' } });
   const valid = new Set(packages.map(p=>p._id));
-  const ids = mocks.filter(m=>!m.package_id || valid.has(m.package_id)).map(m=>m._id);
-  const rows = await Submission.find({ mock_id: { $in: ids } });
+  const byId = new Map(mocks.filter(m=>!m.package_id || valid.has(m.package_id)).map(m=>[m._id,m]));
+  const all = await Submission.find({ mock_id: { $in: [...byId.keys()] } });
+  const rows=all.filter(s=>{const m=byId.get(s.mock_id), date=new Date(m.status==='daily'||m.room_id?s.submitted_at:m.ends_at);return date>=start&&date<end&&new Date(releaseAt(m,s))<=asOf;});
   const sums = new Map();
   for (const row of rows) {
     const sum = sums.get(row.telegram_id) || { name: row.name, correct: 0, total: 0, tests: 0 };
@@ -92,8 +94,9 @@ async function publishWeekly(api,group,now) {
   if(await JobLog.findOne({key:`${key}:complete`,state:'done'}))return;
   const {rows}=await periodRows(group._id,start,end,now);
   if(!rows.length)return;
-  const text=await weeklyText(group._id,start,now);
-  if(await sendReport(api,group.chat_id,text,key))await delivered(`${key}:complete`,async()=>{});
+  const text=group.daily_mode ? '🏆 Haftalik yakun tayyor. Natijalar va reytingni ilovada ko‘ring.' : await weeklyText(group._id,start,now);
+  if(group.daily_mode){if(await delivered(key,()=>api.sendMessage(group.chat_id,text,{reply_markup:resultsButton()})))await delivered(`${key}:complete`,async()=>{});}
+  else if(await sendReport(api,group.chat_id,text,key))await delivered(`${key}:complete`,async()=>{});
 }
 async function resultsText(mock) {
   const submissions = await Submission.find({ mock_id: mock._id });
@@ -126,6 +129,18 @@ async function closeMock(api, group, mock, now) {
   await Mock.updateOne({ _id: mock._id, status:'closed' }, { $set: { reported: true } });
 }
 
+function resultsButton() {
+  return {inline_keyboard:[[{text:'📊 Natijangizni ko‘rish',url:`https://t.me/${config.BOT_USERNAME}?start=results`}]]};
+}
+async function publishDaily(api,group,now) {
+  const day=dayStart(now), release=new Date(day.getTime()+(22*60+10)*60_000);
+  if(now<release)return;
+  const mocks=await Mock.find({group_id:group._id,status:{$in:['daily','open','closed']}});
+  const rows=await Submission.find({mock_id:{$in:mocks.map(m=>m._id)},submitted_at:{$gte:day,$lt:new Date(day.getTime()+DAY)}});
+  if(!rows.length)return;
+  await delivered(`bio:daily-link:${group._id}:${localTime(day).slice(0,10)}`,()=>api.sendMessage(group.chat_id,
+    '📊 Bugungi natijalar tayyor! Kim, qachon va nechta to‘g‘ri ishlaganini ilovada ko‘ring.',{reply_markup:resultsButton()}));
+}
 async function tick(api, now = new Date()) {
   const groups = await Group.find({ enabled: true });
   for (const group of groups) {
@@ -140,7 +155,7 @@ async function tick(api, now = new Date()) {
           else await delivered(`bio:empty:${group._id}:${slot.toISOString()}`, () => api.sendMessage(ownerId(), `⚠️ ${group.title}: bu hafta uchun 50 savollik tayyor mock navbatda yo‘q. Admin menyusidan yuklang.`));
         }
       }
-      const mocks = await Mock.find({ group_id: group._id, status: { $in: ['scheduled', 'opening', 'open', 'closed'] }, reported: { $ne: true } }).sort({ starts_at: 1 });
+      const mocks = await Mock.find({ group_id: group._id, kind:{$ne:'room'}, status: { $in: ['scheduled', 'opening', 'open', 'closed'] }, reported: { $ne: true } }).sort({ starts_at: 1 });
       for (let mock of mocks) {
         const untilStart = new Date(mock.starts_at) - now;
         if (mock.status === 'scheduled' && untilStart > 0 && untilStart <= START_REMINDER_MS) {
@@ -166,8 +181,9 @@ async function tick(api, now = new Date()) {
         }
         if (mock.status === 'open' && new Date(mock.ends_at) <= now || mock.status === 'closed') await closeMock(api, group, mock, now);
       }
+      if(group.daily_mode)await publishDaily(api,group,now);
       await publishWeekly(api,group,now);
     } catch (e) { console.error('Biology schedule failed', group._id, e.code || 'delivery'); }
   }
 }
-module.exports = { ownerId, isOwner, profile, enroll, begin, accepted, accept, delivered, tick, weeklyText, dailyText, periodRows, publishWeekly, resultsText, closeMock, openMock };
+module.exports = { ownerId, isOwner, profile, enroll, begin, accepted, accept, delivered, tick, weeklyText, dailyText, periodRows, publishWeekly, publishDaily, resultsButton, resultsText, closeMock, openMock };

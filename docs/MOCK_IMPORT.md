@@ -7,22 +7,19 @@
 3. Bot har bir savolni va kalitni tekshiradi. Xato bo‘lsa savol IDsi bilan yozadi.
 4. **📚 Barcha MOCKlar** → mock → **👁 Savollarni ko‘rish**, **🔑 Kalit**.
 5. **✅ Qoralamani tasdiqlash**. Tasdiqlanmagan qoralama guruhga chiqmaydi.
-6. **📤 Guruhga yuborish** → mock → guruh → hozir, sana yoki 50 talik haftalik navbat.
-7. Sana uchun `2026-11-22 20:00 / 2026-11-22 21:30` formatida boshlanish va tugashni kiriting (Toshkent). Faqat boshlanish berilsa guruh davomiyligi ishlatiladi. Eng ko‘pi 4 soat.
-8. **📊 Natijalar** / **🏆 Leaderboard** orqali natijalarni ko‘ring.
+6. **📤 Guruhga yuborish** → mock → guruh → o‘quvchiga ko‘rinadigan nom → mavzular → **Saqlash va ochish**.
+7. Sana kiritish yo‘q. Testlar har kuni **07:00–22:00**, natija va tahlil **22:10** (Toshkent).
+8. **🏷 Nom va mavzu** orqali mavjud test metama’lumotlarini o‘zgartirish mumkin.
 
-**Boshlanish eslatmasi:** bot boshlanishiga 10 minut qolganda tanlangan guruhga bir
-marta xabar yuboradi. 10 minutdan kam vaqt qolgan bo‘lsa, qolgan minutni yozadi.
-Bu oldindan rejalashtirilgan mocklar va haftalik navbat uchun avtomatik; alohida yoqish
-shart emas. Savollar va javob topshirish faqat belgilangan boshlanish vaqtida ochiladi.
-
-Bot guruhga hali ulanmagan bo‘lsa: botni guruh admini qiling, guruhda `/ulash` yuboring. Har bir qatnashchi **Qatnashaman** tugmasini bossin. Avvalgi ro‘yxatdan o‘tish va haftalik jadval ishlashda davom etadi.
+Bot guruhga hali ulanmagan bo‘lsa: botni guruh admini qiling, guruhda `/ulash` yuboring. Har bir qatnashchi **Qatnashaman** tugmasini bossin. Avval e’lon qilingan interaktiv testlar yangi kunlik rejimga o‘tadi; o‘chirilgan/bekor qilingan testlar ochilmaydi. Eski natijalar va ularning ochilish vaqti saqlanadi.
 
 **Tahrirlash:** faqat qoralama uchun shu `mock_id` va `version` bilan to‘liq tuzatilgan ZIP/JSON yuboring. Tasdiqlangan versiya o‘zgarmaydi; yangilash uchun `version`ni oshiring. Oldingi natijalar eski versiyaga bog‘langanicha qoladi.
 
 **O‘chirish:** tasdiqlangach MOCKning barcha rejalashtirilgan/o‘tkazilgan nusxalari, javoblari, urinishlari, natijalari va tahlili olib tashlanadi. U ilova, **Natijalarim** va reytingdan yo‘qoladi; eski havolalari yopiladi. Bu amal qaytarilmaydi. Boshqa MOCKlar saqlanadi. Faqat boshlanmagan bitta yuborishni bekor qilish uchun **Mocklar navbati**dan foydalaning.
 
-**Reyting:** test tugagach guruhga shu kunning natijalari chiqadi. To‘liq haftalik yig‘indi dushanba 00:00 da (Toshkent), oldingi dushanba–yakshanba uchun bir marta yuboriladi. Har daqiqalik tekshiruv sababli bir daqiqagacha kechikish mumkin. Avval yuborilgan Telegram xabarlari o‘zgarishsiz qoladi.
+**Reyting:** guruhga 22:10 da faqat **Natijangizni ko‘rish** tugmasi yuboriladi. Ilovadagi **Natijalar** sahifasi sana, ism, test, boshlash/topshirish vaqti va ballni ko‘rsatadi. **Haftalik yakun** oxirgi tugagan dushanba–yakshanbani jamlaydi. Eski Telegram xabarlari o‘zgarmaydi.
+
+**Musobaqa:** ilovadan 2 yoki 3 kishilik xona yarating; do‘stlar 8 belgili kod bilan qo‘shiladi. Hamma qo‘shilgach egasi hech kim ishlamagan testni tanlab boshlaydi. 60 daqiqagacha, 22:00 dan kech emas. Hamma topshirsa g‘olib/teng ball bo‘lsa durang chiqadi. Javoblar kaliti 22:10 gacha yopiq. Kutish xonasi 30 daqiqada tugaydi; to‘liq topshirilmagan musobaqada g‘olib e’lon qilinmaydi.
 
 **Qayta topshirish:** **🔄 Qayta topshirishga ruxsat** → `MOCKKOD TELEGRAM_ID`; yoki Natijalar → mock → Ruxsat berish → ID. Faqat ochiq mockda, bir marta, jami 5 urinishgacha. O‘quvchi mockni qayta ochadi. Avvalgi urinish tarixi saqlanadi; reytingda oxirgi ruxsat etilgan natija turadi. Muddat tugagach ruxsat ham topshirishni ochmaydi.
 
@@ -34,7 +31,7 @@ Bot guruhga hali ulanmagan bo‘lsa: botni guruh admini qiling, guruhda `/ulash`
 
 Testni boshqa menyudan qayta qidirish kerak emas. Mini App oynasini ochishda foydalanuvchi
 tugmani bosadi — bot uni chat xabari orqali o‘z-o‘zidan ochmaydi. Test boshlanmagan bo‘lsa,
-bot boshlanish vaqtini va **🔄 Testni ochish**ni ko‘rsatadi. Eski e’lonlardagi tugmalar ham ishlaydi.
+bot 07:00–22:00 ish vaqtini ko‘rsatadi. Eski e’lonlardagi tugmalar ham ishlaydi.
 Bir guruhda bir nechta faol mock bo‘lsa, umumiy guruh havolasi tanlash ro‘yxatini ko‘rsatadi;
 aniq mock e’lonidagi tugma esa doim o‘sha testga olib boradi.
 
@@ -121,7 +118,7 @@ Bu sxema ko‘rsatmasi. Botga tayyor, to‘liq namuna: `examples/mock-30/import.
 
 Guruhdagi havola → bot → mock → **🧩 Botda ishlash** yoki **🌐 Test oynasini ochish**. Telegram ichida A/B/C/D tugmalari; Mini Appda savol raqamlari, taymer, javobni o‘zgartirish/tozalash va yakuniy tasdiq bor. Matn yoki javob varaqasi rasmi bilan topshirish ham saqlangan.
 
-Topshirgach faqat **Javoblaringiz saqlandi** xabari va natija ochiladigan vaqt chiqadi. To‘g‘ri/umumiy, xato, foiz va to‘g‘ri javoblar MOCKning **umumiy tugash vaqtigacha** berilmaydi. Muddat tugagach **Natijalarim → 🔍 Tahlil** yoki Mini Appdagi **Natijalar va tahlil** orqali o‘z topshirgan javoblaringizni qayta ko‘rasiz. To‘g‘ri variant yashil, xato tanlov qizil; xato/bo‘sh savollar filtri bor. Tahlil faqat ko‘rish uchun: yangi urinish ochmaydi, javob yoki ballni o‘zgartirmaydi. Guruh leaderboardi va topshirmaganlar ham muddat tugagach chiqadi.
+Topshirgach faqat **Javoblaringiz saqlandi** xabari va natija ochiladigan vaqt chiqadi. To‘g‘ri/umumiy, xato, foiz va to‘g‘ri javoblar topshirilgan kunning **22:10** vaqtigacha berilmaydi. Muddat tugagach **Natijalarim → 🔍 Tahlil** yoki Mini Appdagi **Natijalar va tahlil** orqali o‘z topshirgan javoblaringizni qayta ko‘rasiz. To‘g‘ri variant yashil, xato tanlov qizil; xato/bo‘sh savollar filtri bor. Tahlil faqat ko‘rish uchun: yangi urinish ochmaydi, javob yoki ballni o‘zgartirmaydi. Guruhda natijalar sahifasiga havola beriladi.
 
 Mini Appni oddiy brauzerda ochish foydalanuvchini tizimga kiritmaydi. Botdagi `web_app` tugmasidan ochish kerak. O‘quvchi IDsi va balli frontenddan qabul qilinmaydi: server Telegram HMAC imzosini tekshiradi, server sessiyasi beradi, guruh a’zoligini qayta tekshiradi va SQL ichida vaqt/urinishni tekshiradi.
 
@@ -134,6 +131,8 @@ Javob kalitini HTML/JavaScript yoki ochiq JSONga **kiritmang**; CSS bilan yashir
 Mavjud API manzili: `https://sxcdniihidqfqivfijtn.supabase.co/functions/v1/enzo-bot/api`. Barcha so‘rovlar POST, JSON. `/session`ga Telegram `init_data` yuboriladi; qolgan so‘rovlar qaytgan `token` bilan `Authorization: Bearer TOKEN` orqali autentifikatsiyalanadi. Oddiy Telegram ID yuborish kirish huquqini bermaydi. Boshqa HTML domenidan foydalanilsa, serverning ruxsat etilgan Mini App origini ham moslanishi kerak.
 
 - `/submit`: mavjud `run_id`, `mock_id`, `version`, `nonce`, `answers` formatini saqlaydi. Muvaffaqiyatli javob: `{"ok":true,"received":true,"results_available_at":"ISO vaqt","mock_id":"BIO-...","version":1}`. Ball yoki to‘g‘ri javoblar qaytmaydi.
+- `/results`: faqat joriy guruh a’zolariga ochilgan natijalar; kalitlar yo‘q.
+- `/room-create`, `/room-join`, `/room-start`, `/room-leave`, `/room-state`: Telegram sessiyasi bilan himoyalangan musobaqa API.
 - `/list`: `history` ichida faqat shu akkaunt topshirgan testlar bor. `review_ready:false` bo‘lsa ball maydonlari yo‘q; tugagach `correct`, `total`, `percent` beriladi.
 - `/review`: `{"run_id":"24 belgili ichki test IDsi"}` yuboring. Server umumiy `ends_at` o‘tganini va aynan shu akkaunt topshirganini tekshiradi. Muddatgacha xato javobi keladi; savol/kalit berilmaydi.
 - Tahlil javobi: `mock`, `result`, `questions`, `server_time`. Har bir savolda `number`, `text`, `options`, `selected_answer`, `correct_answer`, `is_correct` bor. `selected_answer:"-"` — bo‘sh. Savollar fayl ko‘rinishida yaratilgan eski mocklarda `options:null` bo‘lishi mumkin.
@@ -145,6 +144,7 @@ Mavjud API manzili: `https://sxcdniihidqfqivfijtn.supabase.co/functions/v1/enzo-
 - `import-ui.js`, `catalog.js`: admin katalogi va bot savollari.
 - `auth.js`, `api.js`: Telegram Mini App autentifikatsiyasi va server API.
 - `bio_packages`: qoralama/tasdiqlangan versiyalar; `bio_mocks`: guruhga o‘tkazishning o‘zgarmas nusxalari.
+- `bio_rooms`: 2/3 kishilik xona, server kodi, qatnashchilar, tanlangan MOCK va muddat.
 - `bio_attempts`: server boshlanish vaqti, urinish nonce, botda belgilangan javoblar, admin ruxsati.
 - `bio_submissions`: Telegram ID, tashqi MOCK ID, versiya, savol IDlari, javoblar, vaqtlar, ball va avvalgi ruxsatli urinishlar.
 - `bio_begin` va `bio_submit_v2`: PostgreSQL soati va advisory lock orqali atomar start/topshirish; takroriy bir xil request idempotent.
@@ -165,7 +165,7 @@ npm run test:postgres
 npm run build:edge
 ```
 
-1. Mavjud bazada faqat hali qo‘llanmagan migratsiyalarni tartib bilan bajaring: `20261115085124_biology_import.sql`, keyin `20261116144055_biology_delete_results.sql`. Ikkinchisi oldin o‘chirilgan MOCKlarning qolgan natijalarini ham tozalaydi. Boshlang‘ich sxemani qayta yaratmang.
+1. Mavjud bazada faqat hali qo‘llanmagan migratsiyalarni tartib bilan bajaring: `20261115085124_biology_import.sql`, keyin `20261116144055_biology_delete_results.sql`, keyin `20261118140357_biology_daily_rooms.sql`. Ikkinchisi oldin o‘chirilgan MOCKlarning qolgan natijalarini ham tozalaydi. Boshlang‘ich sxemani qayta yaratmang.
 2. Vault’da `enzo_MINIAPP_URL`ga `https://biology-mock-enzo.egostrange316.chatgpt.site` yozing. `enzo_BOT_TOKEN`, `enzo_ADMIN_IDS`, Gemini va webhook/cron sirlarini saqlang. Tokenlar faqat server muhitida/Vault’da; `.env` Git’da yo‘q.
 3. `miniapp/` fayllarini HTTPS static hostingga joylang. Boshqa hosting tanlansa `app.js`dagi API URL va `_headers`dagi origin ham moslansin. Supabase Edge Function HTML emas, API xizmatini beradi.
 4. `enzo-bot` funksiyasini qayta deploy qiling: `index.ts`, `handler.mjs`, yangi `runtime.mjs`, `deno.json`. `verify_jwt=false` qoladi: webhook maxfiy sarlavhasi, cron siri va Mini App Telegram imzosi o‘z yo‘llarida tekshiriladi.

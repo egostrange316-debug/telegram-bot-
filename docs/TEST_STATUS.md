@@ -1,3 +1,15 @@
+# Kunlik MOCK, natijalar lentasi va musobaqa — 2026-11-19
+
+- Har kuni 07:00–22:00 (Asia/Tashkent), oddiy ball/tahlil 22:10. Baza soati mustaqil tekshiradi; topshirish javobi ballsiz. Xabar faqat natijalar sahifasi tugmasi, kuniga bir marta. Admin sanalar o‘rniga nom/mavzularni kiritadi; mavjud metadata uchun alohida tugma bor.
+- 2/3 kishilik xona: 8 belgili kod, joriy Telegram guruh a’zoligi, sig‘im va boshlash atomar SQL’da; hamma to‘lgach faqat ega hech kim ishlamagan testni boshlaydi. 60 minutgacha/22:00 gacha, kutish 30 minut. G‘olib hamma topshirgach; teng ball durang. Kalit 22:10 gacha maxfiy. Timeout to‘liq bo‘lmagan musobaqaga g‘olib bermaydi.
+- `npm run test:biology`: **171 PASS**, `test:unit`: **80 PASS**, `test:postgres`: **17 PASS**. Alohida migratsiya fixturelari eski score/javob/release vaqtini saqlash va bekor qilingan testni ochmaslikni tekshiradi. SQL/PGlite; Telegram va Gemini soxta. Ertasi kun nonce, to‘lgan xona, boshqa guruh a’zosi, parallel urinish, API/SQL vaqti, maxfiy natija, qayta so‘rov, 3 kishilik durang, o‘chirish ham tekshirilgan.
+- Barcha Mini App yo‘llari va OPTIONS so‘rovlari Edge handler orqali o‘tishi modul testida qamrab olingan. DOM sinovlari: tahlil faqat ko‘rish, XSS matn, xato/bo‘sh filtri, yopiq natija va Telegramdan tashqarida autentifikatsiya — PASS. JavaScript sintaksisi va Edge bundle yig‘ilishi — PASS.
+- Jonli migratsiya: 2 amaldagi interaktiv MOCK `daily`, 3 o‘chirilgan nusxa `deleted`; avvalgi 3 natijaning saqlanadigan maydonlari hash bo‘yicha aynan o‘sha holatda. `bio_rooms` shu RLS bilan himoyalangan hujjatlar jadvalida; yangi RPC faqat `service_role`ga ochiq. Oldingi xavfsizlik advisories o‘zgarmadi.
+- Supabase `enzo-bot` **v13 ACTIVE**. Health 200; yangi results/room endpointlariga imzosiz kirish 401, Mini App originidan OPTIONS 204. Cron so‘nggi 10 so‘rovda 202. Mini App **Sites 3-versiya** muvaffaqiyatli joylandi; jonli sahifa brauzerda ochildi.
+- Telefon kengligidagi sintetik fixture bilan MOCKlar/natijalar/xona UI tekshirildi; fixture prodga kiritilmadi. Haqiqiy Telegram o‘quvchi akkaunti bilan to‘liq mobil sessiya bajarilmadi. Jonli bazaga sinov a’zolari yoki natijalari kiritilmadi.
+
+---
+
 # O‘chirish va kunlik/haftalik reyting — 2026-11-16
 
 - `bio_delete_package` atomar migratsiyasi katalog MOCKini, barcha ishga tushirilgan/rejalashtirilgan nusxalarini o‘chiradi; savollar/kalitlar, topshirilgan javoblar, urinishlar va pending sessiyalar olib tashlanadi. Eski havola/worker testni qayta ocholmaydi. Faqat xizmat roliga ruxsat bor.

@@ -39,7 +39,7 @@ var require_postgres = __commonJS({
     function configureDatabase(call) {
       rpc = call;
     }
-    var dates = /* @__PURE__ */ new Set(["createdAt", "updatedAt", "subscription_end_date", "expires_at", "submitted_at", "accepted_at", "draft_until", "analyzed_at", "finished_at", "completed_at", "lease_until", "paid_at", "paid_through", "starts_at", "ends_at", "closed_at"]);
+    var dates = /* @__PURE__ */ new Set(["createdAt", "updatedAt", "subscription_end_date", "expires_at", "submitted_at", "accepted_at", "draft_until", "analyzed_at", "finished_at", "completed_at", "lease_until", "paid_at", "paid_through", "starts_at", "ends_at", "closed_at", "available_at", "started_at"]);
     function revive(value, key) {
       if (value == null) return value;
       if (dates.has(key) && typeof value === "string") return new Date(value);
@@ -163,15 +163,17 @@ var require_postgres = __commonJS({
     model("ScreenshotResult", "bot_screenshot_results", { needs_analysis: false, read_count: 1, report_chats: [] });
     model("AttendanceReport", "bot_attendance_reports", { result_ids: [] }, false);
     model("BioProfile", "bio_profiles", { group_ids: [], mode: "student" });
-    model("BioGroup", "bio_groups", { enabled: true, weekly_enabled: false, weekday: 0, time: "20:00", duration: 90 });
+    model("BioGroup", "bio_groups", { enabled: true, daily_mode: true, weekly_enabled: false, weekday: 0, time: "20:00", duration: 90 });
     model("BioMock", "bio_mocks", { status: "draft", materials: [], roster: [] });
     model("BioSubmission", "bio_submissions");
     model("BioPackage", "bio_packages", { status: "draft" });
     model("BioAttempt", "bio_attempts");
+    model("BioRoom", "bio_rooms");
+    var roomAction = (args) => rpc("bio_room_action", args);
     var deleteBiologyPackage = (args) => rpc("bio_delete_package", args);
     var beginBiology = (args) => rpc("bio_begin", args);
     var submitBiology = (args) => rpc("bio_submit_v2", args);
-    module.exports = { ...models, configureDatabase, revive, project, submitBiology, beginBiology, deleteBiologyPackage };
+    module.exports = { ...models, configureDatabase, revive, project, submitBiology, beginBiology, deleteBiologyPackage, roomAction };
   }
 });
 
@@ -473,6 +475,24 @@ var require_domain = __commonJS({
   }
 });
 
+// src/biology/timing.js
+var require_timing = __commonJS({
+  "src/biology/timing.js"(exports, module) {
+    var { dayStart } = require_domain();
+    function windowFor(mock, now = /* @__PURE__ */ new Date()) {
+      if (mock?.status !== "daily") return { starts_at: mock?.starts_at, ends_at: mock?.ends_at, available_at: mock?.available_at || mock?.ends_at };
+      const day = dayStart(now).getTime();
+      return { starts_at: new Date(day + 7 * 36e5), ends_at: new Date(day + 22 * 36e5), available_at: new Date(day + (22 * 60 + 10) * 6e4) };
+    }
+    function isOpen(mock, now = /* @__PURE__ */ new Date()) {
+      const w = windowFor(mock, now);
+      return ["daily", "open"].includes(mock?.status) && new Date(w.starts_at) <= now && now < new Date(w.ends_at);
+    }
+    var releaseAt = (mock, submission) => mock?.status === "daily" || mock?.room_id ? submission?.available_at || mock?.available_at || windowFor(mock).available_at : mock?.ends_at;
+    module.exports = { windowFor, isOpen, releaseAt };
+  }
+});
+
 // src/biology/service.js
 var require_service = __commonJS({
   "src/biology/service.js"(exports, module) {
@@ -482,6 +502,7 @@ var require_service = __commonJS({
     var { deliverOnce, sendReport } = require_delivery();
     var { sendMaterial } = require_common();
     var { InputError, esc, answerText, localTime, latestSlot, weekStart, dayStart, rank, isMember, DAY } = require_domain();
+    var { windowFor, releaseAt } = require_timing();
     var START_REMINDER_MS = 10 * 6e4;
     var ownerId = () => config.ADMIN_IDS[0];
     var isOwner = (id) => Number.isSafeInteger(id) && id === ownerId();
@@ -500,7 +521,7 @@ var require_service = __commonJS({
       if (!isMember(member)) throw new InputError("Avval shu Telegram guruhiga qo\u2018shiling.");
       await profile(user);
       await Profile.updateOne({ telegram_id: user.id }, { $addToSet: { group_ids: group._id } });
-      await Mock.updateMany({ group_id: group._id, status: { $in: ["opening", "open"] } }, { $addToSet: { roster: user.id } });
+      await Mock.updateMany({ group_id: group._id, status: { $in: ["opening", "open"] }, kind: { $ne: "room" } }, { $addToSet: { roster: user.id } });
     }
     async function delivered(key, send) {
       if (await deliverOnce(key, send)) return true;
@@ -511,7 +532,7 @@ var require_service = __commonJS({
       return beginBiology({ p_mock_id: mock._id, p_telegram_id: user.id, p_new_id: randomBytes(12).toString("hex"), p_nonce: randomBytes(16).toString("hex") });
     }
     function accepted(result) {
-      if (!result.ok) throw new InputError({ closed: "Mock boshlanmagan yoki muddati tugagan.", membership: "Guruh a\u2019zoligi tasdiqlanmadi.", already: "Siz topshirgansiz. Qayta topshirishga admin ruxsati kerak.", stale: "Bu urinish eskirgan. Mockni botdan qayta oching." }[result.reason] || "Javob qabul qilinmadi.");
+      if (!result.ok) throw new InputError({ closed: "Mock boshlanmagan yoki muddati tugagan.", membership: "Guruh a\u2019zoligi tasdiqlanmadi.", already: "Siz topshirgansiz. Qayta topshirishga admin ruxsati kerak.", stale: "Bu urinish eskirgan. Mockni botdan qayta oching.", busy: "Bu MOCK boshqa ochiq urinish yoki musobaqada band.", room: "Bu musobaqada qatnashish huquqi yo\u2018q." }[result.reason] || "Javob qabul qilinmadi.");
       return result;
     }
     async function accept(mock, user, answers, nonce) {
@@ -552,11 +573,15 @@ Guruh natijalari muddat tugagach chiqadi. Qayta topshirish faqat admin ruxsati b
       await Mock.updateOne({ _id: mock._id, status: "opening" }, { $set: { status: "open" } });
     }
     async function periodRows(groupId, start, end, asOf = /* @__PURE__ */ new Date()) {
-      const mocks = await Mock.find({ group_id: groupId, status: "closed", ends_at: { $gte: start, $lt: end, $lte: asOf } });
+      const mocks = await Mock.find({ group_id: groupId, status: { $in: ["closed", "daily", "open"] } });
       const packages = await Package.find({ _id: { $in: mocks.map((m) => m.package_id).filter(Boolean) }, status: { $ne: "deleted" } });
       const valid = new Set(packages.map((p) => p._id));
-      const ids = mocks.filter((m) => !m.package_id || valid.has(m.package_id)).map((m) => m._id);
-      const rows = await Submission.find({ mock_id: { $in: ids } });
+      const byId = new Map(mocks.filter((m) => !m.package_id || valid.has(m.package_id)).map((m) => [m._id, m]));
+      const all = await Submission.find({ mock_id: { $in: [...byId.keys()] } });
+      const rows = all.filter((s) => {
+        const m = byId.get(s.mock_id), date = new Date(m.status === "daily" || m.room_id ? s.submitted_at : m.ends_at);
+        return date >= start && date < end && new Date(releaseAt(m, s)) <= asOf;
+      });
       const sums = /* @__PURE__ */ new Map();
       for (const row of rows) {
         const sum = sums.get(row.telegram_id) || { name: row.name, correct: 0, total: 0, tests: 0 };
@@ -590,8 +615,11 @@ Hafta davomida yakunlangan MOCKlar yig\u2018indisi. Teng ball \u2014 teng o\u201
       if (await JobLog.findOne({ key: `${key}:complete`, state: "done" })) return;
       const { rows } = await periodRows(group._id, start, end, now);
       if (!rows.length) return;
-      const text = await weeklyText(group._id, start, now);
-      if (await sendReport(api, group.chat_id, text, key)) await delivered(`${key}:complete`, async () => {
+      const text = group.daily_mode ? "\u{1F3C6} Haftalik yakun tayyor. Natijalar va reytingni ilovada ko\u2018ring." : await weeklyText(group._id, start, now);
+      if (group.daily_mode) {
+        if (await delivered(key, () => api.sendMessage(group.chat_id, text, { reply_markup: resultsButton() }))) await delivered(`${key}:complete`, async () => {
+        });
+      } else if (await sendReport(api, group.chat_id, text, key)) await delivered(`${key}:complete`, async () => {
       });
     }
     async function resultsText(mock) {
@@ -626,6 +654,21 @@ Topshirdi: ${submissions.length}/${mock.roster.length}
       if (!await sendReport(api, group.chat_id, mock.daily_text, `bio:daily:${mock._id}`)) return;
       await Mock.updateOne({ _id: mock._id, status: "closed" }, { $set: { reported: true } });
     }
+    function resultsButton() {
+      return { inline_keyboard: [[{ text: "\u{1F4CA} Natijangizni ko\u2018rish", url: `https://t.me/${config.BOT_USERNAME}?start=results` }]] };
+    }
+    async function publishDaily(api, group, now) {
+      const day = dayStart(now), release = new Date(day.getTime() + (22 * 60 + 10) * 6e4);
+      if (now < release) return;
+      const mocks = await Mock.find({ group_id: group._id, status: { $in: ["daily", "open", "closed"] } });
+      const rows = await Submission.find({ mock_id: { $in: mocks.map((m) => m._id) }, submitted_at: { $gte: day, $lt: new Date(day.getTime() + DAY) } });
+      if (!rows.length) return;
+      await delivered(`bio:daily-link:${group._id}:${localTime(day).slice(0, 10)}`, () => api.sendMessage(
+        group.chat_id,
+        "\u{1F4CA} Bugungi natijalar tayyor! Kim, qachon va nechta to\u2018g\u2018ri ishlaganini ilovada ko\u2018ring.",
+        { reply_markup: resultsButton() }
+      ));
+    }
     async function tick(api, now = /* @__PURE__ */ new Date()) {
       const groups = await Group.find({ enabled: true });
       for (const group of groups) {
@@ -638,7 +681,7 @@ Topshirdi: ${submissions.length}/${mock.roster.length}
               else await delivered(`bio:empty:${group._id}:${slot.toISOString()}`, () => api.sendMessage(ownerId(), `\u26A0\uFE0F ${group.title}: bu hafta uchun 50 savollik tayyor mock navbatda yo\u2018q. Admin menyusidan yuklang.`));
             }
           }
-          const mocks = await Mock.find({ group_id: group._id, status: { $in: ["scheduled", "opening", "open", "closed"] }, reported: { $ne: true } }).sort({ starts_at: 1 });
+          const mocks = await Mock.find({ group_id: group._id, kind: { $ne: "room" }, status: { $in: ["scheduled", "opening", "open", "closed"] }, reported: { $ne: true } }).sort({ starts_at: 1 });
           for (let mock of mocks) {
             const untilStart = new Date(mock.starts_at) - now;
             if (mock.status === "scheduled" && untilStart > 0 && untilStart <= START_REMINDER_MS) {
@@ -671,13 +714,14 @@ Tayyor turing \u2014 test boshlanganda shu guruhga xabar yuboriladi.`,
             }
             if (mock.status === "open" && new Date(mock.ends_at) <= now || mock.status === "closed") await closeMock(api, group, mock, now);
           }
+          if (group.daily_mode) await publishDaily(api, group, now);
           await publishWeekly(api, group, now);
         } catch (e) {
           console.error("Biology schedule failed", group._id, e.code || "delivery");
         }
       }
     }
-    module.exports = { ownerId, isOwner, profile, enroll, begin, accepted, accept, delivered, tick, weeklyText, dailyText, periodRows, publishWeekly, resultsText, closeMock, openMock };
+    module.exports = { ownerId, isOwner, profile, enroll, begin, accepted, accept, delivered, tick, weeklyText, dailyText, periodRows, publishWeekly, publishDaily, resultsButton, resultsText, closeMock, openMock };
   }
 });
 
@@ -3536,6 +3580,7 @@ var require_catalog = __commonJS({
     var { BioPackage: Package, BioMock: Mock, BioGroup: Group, BioAttempt: Attempt, BioSubmission: Submission, deleteBiologyPackage } = require_postgres();
     var { InputError, localTime } = require_domain();
     var service = require_service();
+    var { windowFor, isOpen, releaseAt } = require_timing();
     async function savePackage(data, editId) {
       const existing = await Package.findOne({ mock_id: data.mock_id, version: data.version });
       if (editId) {
@@ -3566,6 +3611,8 @@ var require_catalog = __commonJS({
         question_count: m.count,
         starts_at: m.starts_at,
         ends_at: m.ends_at,
+        available_at: m.available_at || m.ends_at,
+        room_id: m.room_id,
         questions: m.questions.map((q) => ({
           question_id: q.question_id,
           source_topic: q.source_topic,
@@ -3575,15 +3622,15 @@ var require_catalog = __commonJS({
         }))
       };
     }
-    function reviewReady(m, now = Date.now()) {
-      const end = new Date(m?.ends_at).getTime();
-      return ["open", "closed"].includes(m?.status) && Number.isFinite(end) && end <= now;
+    function reviewReady(m, now = Date.now(), submission) {
+      const end = new Date(releaseAt(m, submission)).getTime();
+      return ["open", "closed", "daily"].includes(m?.status) && Number.isFinite(end) && end <= now;
     }
     async function reviewForUser(user, runId) {
       const m = await Mock.findById(runId);
       const submission = m && await Submission.findOne({ mock_id: m._id, telegram_id: user.id });
       if (!submission) throw new InputError("Bu test uchun o\u2018zingiz topshirgan natija topilmadi.");
-      if (!reviewReady(m)) throw new InputError(`Tahlil testning umumiy vaqti tugagach ochiladi: ${localTime(m.ends_at)} (Toshkent).`);
+      if (!reviewReady(m, Date.now(), submission)) throw new InputError(`Tahlil testning umumiy vaqti tugagach ochiladi: ${localTime(releaseAt(m, submission))} (Toshkent).`);
       if (submission.answers?.length !== m.count || m.answer_key?.length !== m.count) throw new InputError("Bu eski natijaning javoblari to\u2018liq saqlanmagan.");
       const questions = Array.from({ length: m.count }, (_, i) => {
         const q = m.questions?.[i], selected = submission.answers[i];
@@ -3619,14 +3666,14 @@ var require_catalog = __commonJS({
     }
     async function openForUser(api, user, runId) {
       const m = await Mock.findById(runId);
-      if (!m?.questions || m.status !== "open" || new Date(m.starts_at) > /* @__PURE__ */ new Date() || new Date(m.ends_at) <= /* @__PURE__ */ new Date()) throw new InputError("Test boshlanmagan, muddati tugagan yoki bu faylli mock.");
+      if (!m?.questions || !isOpen(m)) throw new InputError("Test boshlanmagan, muddati tugagan yoki bu faylli mock.");
       await service.enroll(api, user, await Group.findById(m.group_id));
       const attempt = service.accepted(await service.begin(m, user));
-      return { m, attempt };
+      return { m: { ...m, ...windowFor(m) }, attempt };
     }
     async function permitRetake(code, userId) {
-      const m = await Mock.findOne({ code, status: "open" });
-      if (!m || new Date(m.ends_at) <= /* @__PURE__ */ new Date()) throw new InputError("Ochiq mock kodini kiriting.");
+      const m = await Mock.findOne({ code, status: { $in: ["open", "daily"] } });
+      if (!m || m.room_id || !isOpen(m)) throw new InputError("Ochiq mock kodini kiriting.");
       const s = await Submission.findOne({ mock_id: m._id, telegram_id: userId });
       if (!s) throw new InputError("Bu o\u2018quvchi hali topshirmagan.");
       if ((s.generation || 1) >= 5) throw new InputError("Bir mockda eng ko\u2018pi 5 ta urinish.");
@@ -3666,7 +3713,7 @@ var require_import_ui = __commonJS({
     var service = require_service();
     var { InputError, esc, answerText, localTime } = require_domain();
     var { sendReport } = require_delivery();
-    var C = { upload: "\u{1F4E5} MOCK yuklash", all: "\u{1F4DA} Barcha MOCKlar", edit: "\u{1F4DD} MOCKni tahrirlash", remove: "\u{1F5D1} MOCKni o\u2018chirish", send: "\u{1F4E4} Guruhga yuborish", results: "\u{1F4CA} Natijalar", rank: "\u{1F3C6} Leaderboard", key: "\u{1F511} Javoblar kaliti", retake: "\u{1F504} Qayta topshirishga ruxsat" };
+    var C = { rename: "\u{1F3F7} Nom va mavzu", upload: "\u{1F4E5} MOCK yuklash", all: "\u{1F4DA} Barcha MOCKlar", edit: "\u{1F4DD} MOCKni tahrirlash", remove: "\u{1F5D1} MOCKni o\u2018chirish", send: "\u{1F4E4} Guruhga yuborish", results: "\u{1F4CA} Natijalar", rank: "\u{1F3C6} Leaderboard", key: "\u{1F511} Javoblar kaliti", retake: "\u{1F504} Qayta topshirishga ruxsat" };
     async function list(ctx, action = "view", page = 0) {
       const rows = await Package.find({ status: { $ne: "deleted" } }).sort({ createdAt: -1 }).limit(1e3);
       const kb = new InlineKeyboard();
@@ -3679,6 +3726,7 @@ var require_import_ui = __commonJS({
       const kb = new InlineKeyboard().text("\u{1F441} Savollarni ko\u2018rish", `cq:${p._id}:0`).row().text("\u{1F511} Kalit", `cp:key:${p._id}`).row();
       if (p.status === "draft") kb.text("\u2705 Qoralamani tasdiqlash", `ca:${p._id}`).row().text("\u{1F4DD} Tahrirlash", `cp:edit:${p._id}`);
       else kb.text("\u{1F4E4} Guruhga yuborish", `cp:send:${p._id}`);
+      kb.row().text("\u{1F3F7} Nom va mavzu", `cp:label:${p._id}`);
       return ctx.reply(`${p.title}
 ${p.mock_id} \xB7 v${p.version}
 ${p.grade}-sinf \xB7 ${p.question_count} savol
@@ -3712,22 +3760,26 @@ Savollar va kalitni ko\u2018rib, tasdiqlang. HTML xavfsiz test oynasida avtomati
         await card(ctx, p);
         if (remaining.length && !s.data.edit_id) return choosePackage(ctx, remaining);
       });
-      for (const [name, action] of [["all", "view"], ["edit", "edit"], ["remove", "remove"], ["send", "send"], ["key", "key"]]) bot.hears(C[name], async (ctx) => {
+      for (const [name, action] of [["all", "view"], ["edit", "edit"], ["remove", "remove"], ["send", "send"], ["key", "key"], ["rename", "label"]]) bot.hears(C[name], async (ctx) => {
         await admin(ctx);
         clearSession(ctx.from.id);
         return list(ctx, action);
       });
-      bot.callbackQuery(/^cl:(view|edit|remove|send|key):(\d{1,2})$/, async (ctx) => {
+      bot.callbackQuery(/^cl:(view|edit|remove|send|key|label):(\d{1,2})$/, async (ctx) => {
         await admin(ctx);
         await ctx.answerCallbackQuery();
         return list(ctx, ctx.match[1], Number(ctx.match[2]));
       });
-      bot.callbackQuery(/^cp:(view|edit|remove|send|key):([a-f\d]{24})$/, async (ctx) => {
+      bot.callbackQuery(/^cp:(view|edit|remove|send|key|label):([a-f\d]{24})$/, async (ctx) => {
         await admin(ctx);
         const [_, action, id] = ctx.match, p = await Package.findById(id);
         if (!p || p.status === "deleted") throw new InputError("MOCK topilmadi.");
         await ctx.answerCallbackQuery();
         if (action === "view") return card(ctx, p);
+        if (action === "label") {
+          setSession(ctx.from.id, { step: "import_label", data: { package_id: p._id } });
+          return ctx.reply(`Yangi MOCK nomini yuboring. Hozirgi nom: ${p.title}`);
+        }
         if (action === "key") return sendReport(ctx.api, ctx.chat.id, `\u{1F511} <b>${esc(p.mock_id)} v${p.version}</b>
 ` + p.questions.map((q, i) => `${esc(q.question_id)}: ${p.answer_key[i]}`).join("\n"));
         if (action === "edit") {
@@ -3772,7 +3824,7 @@ Admin kaliti: ${p.answer_key[i]}`, { reply_markup: kb });
       });
       bot.hears([C.results, C.rank], async (ctx) => {
         await admin(ctx);
-        const rows = await Mock.find({ status: { $in: ["open", "closed"] } }).sort({ starts_at: -1 }).limit(30);
+        const rows = await Mock.find({ status: { $in: ["open", "closed", "daily"] }, kind: { $ne: "room" } }).sort({ starts_at: -1 }).limit(30);
         const kb = new InlineKeyboard();
         for (const m of rows) kb.text(`${m.title.slice(0, 35)} \xB7 #${m.code}`, `cr:${m._id}`).row();
         return ctx.reply(rows.length ? "Natija va leaderboard uchun MOCKni tanlang:" : "Hali ochilgan mock yo\u2018q.", { reply_markup: kb });
@@ -3800,6 +3852,24 @@ Admin kaliti: ${p.answer_key[i]}`, { reply_markup: kb });
         const s = getSession(ctx.from.id);
         if (!ctx.message || !s?.step?.startsWith("import_")) return next();
         await admin(ctx);
+        if (s.step === "import_label") {
+          const title = ctx.message.text?.trim();
+          if (!title || title.length > 100) throw new InputError("Nom 1\u2013100 belgi bo\u2018lsin.");
+          s.data.title = title;
+          s.step = "import_topics";
+          setSession(ctx.from.id, s);
+          return ctx.reply("Mavzuni yuboring. Masalan: Hujayra, Fotosintez yoki 50\u201359-mavzular.");
+        }
+        if (s.step === "import_topics") {
+          const text = ctx.message.text?.trim();
+          if (!text || text.length > 250) throw new InputError("Mavzu 1\u2013250 belgi bo\u2018lsin.");
+          const topics = text.split(",").map((x) => x.trim()).filter(Boolean);
+          const p = await Package.findOneAndUpdate({ _id: s.data.package_id, status: { $ne: "deleted" } }, { $set: { title: s.data.title, topics } }, { new: true });
+          if (!p) throw new InputError("MOCK o\u2018chirilgan.");
+          await Mock.updateMany({ package_id: p._id, status: { $ne: "deleted" } }, { $set: { title: p.title, topics } });
+          clearSession(ctx.from.id);
+          return card(ctx, p);
+        }
         if (s.step === "import_file") {
           const imported = await download(ctx.api, ctx.message.document, config.BOT_TOKEN);
           if (imported.packages) return choosePackage(ctx, imported.packages, s.data.edit_id);
@@ -3879,13 +3949,14 @@ var require_biology = __commonJS({
     var { randomBytes } = require_crypto();
     var config = require_config();
     var { BioProfile: Profile, BioGroup: Group, BioMock: Mock, BioSubmission: Submission } = require_postgres();
-    var { persistentSession, getSession, setSession, clearSession, materialFromMessage } = require_common();
+    var { persistentSession, getSession, setSession, clearSession, materialFromMessage, sendMaterial } = require_common();
     var { sendReport, messageChunks } = require_delivery();
     var { InputError, esc, parseAnswers, answerText, localTime, parseLocal, isMember } = require_domain();
     var service = require_service();
     var { readSheet } = require_answer_reader();
     var { C, registerImportUI, registerQuizUI } = require_import_ui();
     var catalog = require_catalog();
+    var { windowFor, isOpen, releaseAt } = require_timing();
     var B = {
       mocks: "\u{1F9EC} Mocklar",
       answer: "\u{1F4DD} Javob topshirish",
@@ -3909,10 +3980,9 @@ var require_biology = __commonJS({
       ["id", "Telegram ID"],
       ["cancel", "Bekor qilish"]
     ].map(([command, description]) => ({ command, description }));
-    var days = ["Yakshanba", "Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
     function keyboard(p, id) {
       const kb = new Keyboard();
-      if (service.isOwner(id) && p.mode === "admin") kb.text(C.upload).text(C.all).row().text(C.edit).text(C.remove).row().text(C.send).text(C.key).row().text(C.results).text(C.rank).row().text(C.retake).row().text(B.create).text(B.bank).row().text(B.groups).row().text(B.student);
+      if (service.isOwner(id) && p.mode === "admin") kb.text(C.upload).text(C.all).row().text(C.rename).row().text(C.edit).text(C.remove).row().text(C.send).text(C.key).row().text(C.results).text(C.rank).row().text(C.retake).row().text(B.create).text(B.bank).row().text(B.groups).row().text(B.student);
       else {
         kb.text(B.mocks).text(B.answer).row().text(B.results).text(B.rank).row().text(B.help);
         if (service.isOwner(id)) kb.row().text(B.admin);
@@ -3938,24 +4008,25 @@ var require_biology = __commonJS({
     async function listMocks(ctx, groupId) {
       const p = await service.profile(ctx.from);
       const groups = await Group.find({ _id: { $in: typeof groupId === "string" ? p.group_ids.filter((id) => id === groupId) : p.group_ids }, enabled: true });
-      const mocks = await Mock.find({ group_id: { $in: groups.map((g) => g._id) }, status: { $in: ["scheduled", "opening", "open"] }, ends_at: { $gt: /* @__PURE__ */ new Date() } }).sort({ starts_at: 1 }).limit(30);
+      const mocks = await Mock.find({ group_id: { $in: groups.map((g) => g._id) }, kind: { $ne: "room" }, $or: [{ status: "daily" }, { status: { $in: ["scheduled", "opening", "open"] }, ends_at: { $gt: /* @__PURE__ */ new Date() } }] }).sort({ starts_at: 1 }).limit(30);
       if (!mocks.length) return ctx.reply("Hozir ochiq mock yo\u2018q. Guruhdagi \xABQatnashaman\xBB tugmasi orqali ro\u2018yxatdan o\u2018ting.");
       const kb = new InlineKeyboard();
-      for (const m of mocks) kb.text(`${m.status === "open" ? "\u{1F7E2}" : "\u{1F552}"} ${m.title.slice(0, 35)} \xB7 ${m.count}`, `bm:${m.code}`).row();
+      for (const m of mocks) kb.text(`${isOpen(m) ? "\u{1F7E2}" : "\u{1F552}"} ${m.title.slice(0, 35)} \xB7 ${m.count}`, `bm:${m.code}`).row();
       return ctx.reply("Mockni tanlang:", { reply_markup: kb });
     }
     async function enrollForMock(ctx, code) {
-      const m = await Mock.findOne({ code });
-      if (!m || !["scheduled", "opening", "open"].includes(m.status) || new Date(m.ends_at) <= /* @__PURE__ */ new Date()) throw new InputError("Bu mock ochiq emas yoki muddati tugagan.");
+      let m = await Mock.findOne({ code });
+      if (!m || m.room_id || !["daily", "scheduled", "opening", "open"].includes(m.status) || m.status !== "daily" && new Date(m.ends_at) <= /* @__PURE__ */ new Date()) throw new InputError("Bu mock ochiq emas yoki muddati tugagan.");
+      m = { ...m, ...windowFor(m) };
       const group = await Group.findById(m.group_id);
       if (ctx.chat.type !== "private" && group?.chat_id !== ctx.chat.id) throw new InputError("Guruh mos kelmadi.");
       await service.enroll(ctx.api, ctx.from, group);
-      return m;
+      return { ...m, ...windowFor(m) };
     }
     async function joinGroup(ctx, id) {
       const group = await Group.findById(id);
       await service.enroll(ctx.api, ctx.from, group);
-      const active = await Mock.find({ group_id: id, status: "open", starts_at: { $lte: /* @__PURE__ */ new Date() }, ends_at: { $gt: /* @__PURE__ */ new Date() } }).limit(2);
+      const active = await Mock.find({ group_id: id, kind: { $ne: "room" }, $or: [{ status: "daily" }, { status: "open", starts_at: { $lte: /* @__PURE__ */ new Date() }, ends_at: { $gt: /* @__PURE__ */ new Date() } }] }).limit(2);
       if (active.length === 1) return selectMock(ctx, active[0].code);
       if (active.length > 1) return listMocks(ctx, id);
       const upcoming = await Mock.find({ group_id: id, status: { $in: ["scheduled", "opening"] }, ends_at: { $gt: /* @__PURE__ */ new Date() } }).sort({ starts_at: 1 }).limit(1);
@@ -3964,10 +4035,17 @@ var require_biology = __commonJS({
     }
     async function selectMock(ctx, code) {
       const completed = await Mock.findOne({ code });
-      if (catalog.reviewReady(completed)) return showReview(ctx, code);
+      const saved = completed && await Submission.findOne({ mock_id: completed._id, telegram_id: ctx.from.id });
+      const retake = saved && await require_postgres().BioAttempt.findOne({ mock_id: completed._id, telegram_id: ctx.from.id, $or: [{ retake_allowed: true }, { state: "active" }] });
+      if (saved && !retake) {
+        if (catalog.reviewReady(completed, Date.now(), saved)) return showReview(ctx, code);
+        return ctx.reply(`\u2705 Javoblaringiz saqlangan. Natija ${localTime(releaseAt(completed, saved))} da ochiladi.`);
+      }
       const m = await enrollForMock(ctx, code);
       clearSession(ctx.from.id);
-      if (m.status !== "open" || new Date(m.starts_at) > /* @__PURE__ */ new Date()) {
+      if (!isOpen(m)) {
+        if (m.status === "daily") return ctx.reply(`\u{1F9EC} ${m.title}
+MOCKlar har kuni 07:00\u201322:00 ochiq. Natijalar 22:10 da. (Toshkent)`);
         return ctx.reply(`\u2705 Qatnashchilar ro\u2018yxatiga qo\u2018shildingiz.
 
 \u{1F9EC} ${m.title}
@@ -3997,7 +4075,7 @@ ${config.MINIAPP_URL ? "\xABTestni boshlash\xBBni bosing \u2014 ilovada aynan sh
       return ctx.reply(`\u{1F4DD} ${m.title} \xB7 #${m.code}
 ${m.count} javobni raqamlab yuboring: 1A 2B 3C \u2026 yoki javob varaqasining rasmini yuboring.
 Bo\u2018sh javob: -. Oxirgi muddat: ${localTime(m.ends_at)} (Toshkent).
-Natija va tahlil mockning umumiy vaqti tugagach ochiladi.`);
+Natija va tahlil 22:10 da ochiladi.`);
     }
     function reviewUrl(runId) {
       const url = new URL(config.MINIAPP_URL);
@@ -4018,7 +4096,8 @@ Siz: ${q.selected_answer === "-" ? "Bo\u2018sh" : q.selected_answer} \xB7 To\u20
       return sendReport(ctx.api, ctx.chat.id, text);
     }
     async function prepareAnswer(ctx, m, text, reader) {
-      if (!m || m.status !== "open" || new Date(m.starts_at) > /* @__PURE__ */ new Date() || new Date(m.ends_at) <= /* @__PURE__ */ new Date()) throw new InputError("Javob qabul qilish muddati tugagan yoki mock boshlanmagan.");
+      if (!m || !isOpen(m)) throw new InputError("Javob qabul qilish muddati tugagan yoki mock boshlanmagan.");
+      m = { ...m, ...windowFor(m) };
       const group = await Group.findById(m.group_id);
       if (ctx.chat.type !== "private" && group?.chat_id !== ctx.chat.id) throw new InputError("Bu mock boshqa guruhga tegishli.");
       await service.enroll(ctx.api, ctx.from, group);
@@ -4041,9 +4120,9 @@ Tekshirib tasdiqlang. Xato bo\u2018lsa, javoblarni qayta yuboring. Tasdiq ham mu
       const kb = new InlineKeyboard();
       const texts = rows.filter((r) => byId.has(r.mock_id)).map((r) => {
         const m = byId.get(r.mock_id);
-        if (!catalog.reviewReady(m)) return `\u{1F9EC} <b>${esc(m.title)}</b> \xB7 #${m.code}
+        if (!catalog.reviewReady(m, Date.now(), r)) return `\u{1F9EC} <b>${esc(m.title)}</b> \xB7 #${m.code}
 \u2705 Javoblaringiz saqlandi.
-\u{1F512} Natija va tahlil ${localTime(m.ends_at)} (Toshkent) dan keyin ochiladi.`;
+\u{1F512} Natija va tahlil ${localTime(releaseAt(m, r))} (Toshkent) dan keyin ochiladi.`;
         if (config.MINIAPP_URL) kb.webApp(`\u{1F50D} Tahlil \xB7 ${m.title.slice(0, 35)}`, reviewUrl(m._id)).row();
         else kb.text(`\u{1F50D} Tahlil \xB7 ${m.title.slice(0, 35)}`, `br:${m.code}`).row();
         return `\u{1F9EC} <b>${esc(m.title)}</b> \xB7 #${m.code}
@@ -4069,26 +4148,25 @@ ${r.correct}/${r.total} (${r.percent}%) \xB7 bo\u2018sh: ${r.blank}
       const g = await Group.findById(id);
       if (!g?.enabled) throw new InputError("Guruh ulanmagan.");
       return ctx.reply(`${g.title}
-Haftalik 50 talik mock: ${g.weekly_enabled ? "yoqilgan" : "o\u2018chiq"}
-${days[g.weekday]} ${g.time}, ${g.duration} daqiqa (Toshkent).
-Faqat navbatga yuklangan yangi 50 savollik mock yuboriladi.`, {
-        reply_markup: new InlineKeyboard().text(g.weekly_enabled ? "\u23F8 Jadvalni o\u2018chirish" : "\u25B6\uFE0F Jadvalni yoqish", `bgt:${id}`).row().text("\u{1F552} Vaqtni o\u2018zgartirish", `bgs:${id}`)
-      });
+MOCKlar har kuni 07:00\u201322:00 ochiq.
+Natijalar 22:10 da ilovada ochiladi.
+Guruhga natijani ko\u2018rish tugmasi yuboriladi. Barcha vaqtlar Toshkent bo\u2018yicha.`);
     }
     async function wizardPreview(ctx, s) {
       const g = await Group.findById(s.data.group_id);
-      const when = s.data.plan === "weekly" ? "Haftalik 50 talik navbatga" : s.data.plan === "now" ? `Yaqin daqiqada, ${g.duration} daqiqa` : `${localTime(s.data.starts_at)} \u2014 ${s.data.ends_at ? localTime(s.data.ends_at) : `${g.duration} daqiqa`}`;
+      const when = "Har kuni 07:00\u201322:00 \xB7 Natijalar 22:10";
       s.step = "bio_publish";
       setSession(ctx.from.id, s);
       return ctx.reply(`Tayyor mock:
 ${s.data.title}
 Savollar: ${s.data.count}
+Mavzu: ${(s.data.topics || []).join(", ")}
 Fayllar: ${s.data.materials.length}
 Guruh: ${g.title}
 Vaqt: ${when}
 
 Tasdiqlangach kalit va fayllar o\u2018zgarmaydi.`, {
-        reply_markup: new InlineKeyboard().text("\u2705 Saqlash va rejalashtirish", `bpub:${s.data._id}`)
+        reply_markup: new InlineKeyboard().text("\u2705 Saqlash va ochish", `bpub:${s.data._id}`)
       });
     }
     async function wizardMessage(ctx, s, reader) {
@@ -4137,16 +4215,17 @@ Tekshirib tasdiqlang. O\u2018zgartirish uchun kalitni qayta yuboring.`, { reply_
         s.step = "bio_key";
         return wizardMessage(ctx, s, reader);
       }
-      if (s.step === "bio_date") {
-        const parts = text.split(" / ");
-        const date = parseLocal(parts[0]);
-        if (parts[1]) {
-          const end = parseLocal(parts[1]);
-          if (end <= date || end - date > 4 * 36e5) throw new InputError("Tugash boshlanishdan keyin, 4 soat ichida bo\u2018lsin.");
-          s.data.ends_at = end.toISOString();
-        }
-        if (date <= /* @__PURE__ */ new Date()) throw new InputError("Kelajakdagi vaqtni kiriting.");
-        s.data.starts_at = date.toISOString();
+      if (s.step === "bio_label") {
+        if (!text || text.length > 100) throw new InputError("MOCK nomini 1\u2013100 belgida kiriting.");
+        s.data.title = text === "-" ? s.data.title : text;
+        s.step = "bio_topics";
+        setSession(ctx.from.id, s);
+        return ctx.reply("Qaysi mavzu? Masalan: Hujayra, Fotosintez yoki 50\u201359-mavzular.");
+      }
+      if (s.step === "bio_topics") {
+        if (!text || text.length > 250) throw new InputError("Mavzuni 1\u2013250 belgida kiriting.");
+        s.data.topics = text.split(",").map((x) => x.trim()).filter(Boolean);
+        s.data.plan = "daily";
         return wizardPreview(ctx, s);
       }
       if (s.step === "bio_schedule") {
@@ -4182,14 +4261,14 @@ Chat ID: ${ctx.chat.id}`));
         if (!["creator", "administrator"].includes(owner.status) || !["creator", "administrator"].includes(me.status)) throw new InputError("Siz ham, bot ham Telegram guruhida admin bo\u2018lishingiz kerak.");
         const g = await Group.findOneAndUpdate({ chat_id: ctx.chat.id }, { $set: { title: ctx.chat.title, enabled: true } }, { upsert: true, new: true });
         await service.enroll(ctx.api, ctx.from, g);
-        return ctx.reply("\u{1F9EC} Biologiya mock guruhi ulandi! Har bir a\u2019zo \xABQatnashaman\xBB tugmasini bir marta bossin. Haftalik jadval botdagi admin menyusidan yoqiladi.", {
+        return ctx.reply("\u{1F9EC} Biologiya mock guruhi ulandi! Har bir a\u2019zo \xABQatnashaman\xBB tugmasini bir marta bossin. MOCKlar har kuni 07:00\u201322:00 ochiq, natijalar 22:10 da ilovada ochiladi.", {
           reply_markup: new InlineKeyboard().text("\u{1F64B} Qatnashaman", `bj:${g._id}`)
         });
       });
       bot.command("uzish", async (ctx) => {
         if (!service.isOwner(ctx.from.id) || ctx.chat.type === "private") return;
         const g = await Group.findOneAndUpdate({ chat_id: ctx.chat.id }, { $set: { enabled: false, weekly_enabled: false } }, { new: true });
-        if (g) await Mock.updateMany({ group_id: g._id, status: { $in: ["queued", "scheduled", "opening", "open"] } }, { $set: { status: "cancelled" } });
+        if (g) await Mock.updateMany({ group_id: g._id, status: { $in: ["queued", "scheduled", "opening", "open", "daily"] } }, { $set: { status: "cancelled" } });
         return ctx.reply("Guruh ulanishi va shu guruhdagi tugallanmagan mocklar to\u2018xtatildi.");
       });
       bot.command("qatnashaman", async (ctx) => {
@@ -4220,11 +4299,11 @@ Chat ID: ${ctx.chat.id}`));
         const m = await Mock.findById(p.pending.mock_id), g = m && await Group.findById(m.group_id);
         if (ctx.chat.type !== "private" && ctx.chat.id !== g?.chat_id) throw new InputError("Guruh mos kelmadi.");
         await service.enroll(ctx.api, ctx.from, g);
-        service.accepted(await service.accept(m, ctx.from, p.pending.answers, p.pending.nonce));
+        const result = service.accepted(await service.accept(m, ctx.from, p.pending.answers, p.pending.nonce));
         await Profile.updateOne({ telegram_id: ctx.from.id, "pending.token": ctx.match[2] }, { $unset: { pending: 1 } });
         await ctx.answerCallbackQuery({ text: "\u2705 Javoblar qabul qilindi." });
         return ctx.editMessageText(`\u2705 ${service.isOwner(ctx.from.id) ? "Sizning" : "O\u2018quvchining"} javoblari qabul qilindi \u2014 #${m.code}.
-\u{1F512} Natija, to\u2018g\u2018ri javoblar va tahlil ${localTime(m.ends_at)} (Toshkent) dan keyin ochiladi.
+\u{1F512} Natija, to\u2018g\u2018ri javoblar va tahlil ${localTime(result.available_at || releaseAt(m))} (Toshkent) dan keyin ochiladi.
 Qayta topshirish uchun admin ruxsati kerak.${ctx.chat.type === "private" ? "\nVaqt tugagach \u2192 Natijalarim." : ""}`);
       });
       bot.command("javob", async (ctx) => {
@@ -4252,7 +4331,7 @@ Qayta topshirish uchun admin ruxsati kerak.${ctx.chat.type === "private" ? "\nVa
         }
         if (ctx.message?.reply_to_message) {
           const g = await Group.findOne({ chat_id: ctx.chat.id, enabled: true });
-          const m = g && await Mock.findOne({ group_id: g._id, status: "open", announcement_id: ctx.message.reply_to_message.message_id });
+          const m = g && await Mock.findOne({ group_id: g._id, status: { $in: ["open", "daily"] }, announcement_id: ctx.message.reply_to_message.message_id });
           if (m) return prepareAnswer(ctx, m, ctx.message.text, reader);
         }
         if (ctx.callbackQuery) return ctx.answerCallbackQuery({ text: "Botning shaxsiy chatini oching." });
@@ -4261,6 +4340,7 @@ Qayta topshirish uchun admin ruxsati kerak.${ctx.chat.type === "private" ? "\nVa
       bot.command("start", async (ctx) => {
         clearSession(ctx.from.id);
         const payload = ctx.match.trim();
+        if (payload === "results") return ctx.reply("\u{1F4CA} Natijalar sana, topshirilgan vaqt va MOCK bo\u2018yicha tartiblangan.", { reply_markup: new InlineKeyboard().webApp("\u{1F4CA} Natijangizni ko\u2018rish", config.MINIAPP_URL + "?tab=results") });
         if (/^g_[a-f\d]{24}$/.test(payload)) return joinGroup(ctx, payload.slice(2));
         if (/^r_[a-f\d]{6}$/.test(payload)) return showReview(ctx, payload.slice(2));
         if (/^m_[a-f\d]{6}$/.test(payload)) return selectMock(ctx, payload.slice(2));
@@ -4290,13 +4370,8 @@ Qayta topshirish uchun admin ruxsati kerak.${ctx.chat.type === "private" ? "\nVa
         await ctx.answerCallbackQuery();
         return showReview(ctx, ctx.match[1]);
       });
-      bot.hears(B.rank, async (ctx) => {
-        const p = await service.profile(ctx.from), groups = await Group.find({ _id: { $in: p.group_ids }, enabled: true });
-        for (const g of groups) await sendReport(ctx.api, ctx.chat.id, `<b>${esc(g.title)}</b>
-` + await service.dailyText(g._id, /* @__PURE__ */ new Date()));
-        if (!groups.length) return ctx.reply("Avval guruhda \xABQatnashaman\xBB tugmasini bosing.");
-      });
-      bot.hears(B.help, (ctx) => ctx.reply("1. Guruhda \xABQatnashaman\xBB bosing.\n2. Mockni muddatida ishlang.\n3. Botga yoki guruhdagi mock xabariga javob qilib javoblaringizni yuboring va tasdiqlang.\n4. Umumiy muddat tugagach natija, guruh reytingi va Natijalarim \u2192 Tahlil ochiladi.\nRasm aniq o\u2018qilmasa: 1A 2B 3C \u2026 matnidan foydalaning.\nAdmin: botni guruhga admin qiling \u2192 /ulash."));
+      bot.hears(B.rank, (ctx) => ctx.reply("\u{1F4CA} Kunlik va haftalik natijalarni ilovada ko\u2018ring.", { reply_markup: new InlineKeyboard().webApp("\u{1F4CA} Natijalar", config.MINIAPP_URL + "?tab=results") }));
+      bot.hears(B.help, (ctx) => ctx.reply("1. Guruhda \xABQatnashaman\xBB bosing.\n2. MOCKlar har kuni 07:00\u201322:00 ochiq. Nom va mavzu bo\u2018yicha tanlang.\n3. Oddiy natija va tahlil 22:10 da ilovada ochiladi.\n4. Musobaqa bo\u2018limida 2\u20133 kishilik xona yarating yoki kod bilan qo\u2018shiling. Hamma topshirgach g\u2018olib chiqadi.\nBarcha vaqtlar Toshkent bo\u2018yicha."));
       bot.hears(B.create, async (ctx) => {
         await admin(ctx);
         setSession(ctx.from.id, { step: "bio_title", data: { _id: randomBytes(12).toString("hex") } });
@@ -4305,34 +4380,25 @@ Qayta topshirish uchun admin ruxsati kerak.${ctx.chat.type === "private" ? "\nVa
       bot.hears(B.groups, (ctx) => showGroups(ctx));
       bot.hears(B.bank, async (ctx) => {
         await admin(ctx);
-        const mocks = await Mock.find({}).sort({ createdAt: -1 }).limit(30);
+        const mocks = await Mock.find({ status: { $ne: "deleted" }, kind: { $ne: "room" } }).sort({ createdAt: -1 }).limit(30);
         const kb = new InlineKeyboard();
-        for (const m of mocks) if (["queued", "scheduled"].includes(m.status)) kb.text(`Bekor qilish: ${m.title.slice(0, 30)}`, `bdel:${m._id}`).row();
+        for (const m of mocks) if (["queued", "scheduled", "daily"].includes(m.status)) kb.text(`Bekor qilish: ${m.title.slice(0, 30)}`, `bdel:${m._id}`).row();
         await sendReport(ctx.api, ctx.chat.id, mocks.map((m) => `#${m.code} \xB7 ${esc(m.title)} \xB7 ${m.count} \xB7 ${esc(m.status)}${m.starts_at ? ` \xB7 ${localTime(m.starts_at)}` : ""}`).join("\n") || "Mocklar navbati bo\u2018sh.");
         if (kb.inline_keyboard.length) return ctx.reply("Boshlanmagan mockni navbatdan olib tashlash:", { reply_markup: kb });
       });
       bot.callbackQuery(/^bdel:([a-f\d]{24})$/, async (ctx) => {
         await admin(ctx);
-        await Mock.updateOne({ _id: ctx.match[1], status: { $in: ["queued", "scheduled"] } }, { $set: { status: "cancelled" } });
+        await Mock.updateOne({ _id: ctx.match[1], status: { $in: ["queued", "scheduled", "daily"] } }, { $set: { status: "cancelled" } });
         return ctx.answerCallbackQuery({ text: "Boshlanmagan mock bekor qilindi." });
       });
       bot.callbackQuery(/^bg:([a-f\d]{24})$/, async (ctx) => {
         await ctx.answerCallbackQuery();
         return groupSettings(ctx, ctx.match[1]);
       });
-      bot.callbackQuery(/^bgt:([a-f\d]{24})$/, async (ctx) => {
+      bot.callbackQuery(/^bg[ts]:([a-f\d]{24})$/, async (ctx) => {
         await admin(ctx);
-        const g = await Group.findById(ctx.match[1]);
-        if (!g?.enabled) throw new InputError("Guruh ulanmagan.");
-        await Group.updateOne({ _id: g._id }, { $set: { weekly_enabled: !g.weekly_enabled } });
         await ctx.answerCallbackQuery();
-        return groupSettings(ctx, g._id);
-      });
-      bot.callbackQuery(/^bgs:([a-f\d]{24})$/, async (ctx) => {
-        await admin(ctx);
-        setSession(ctx.from.id, { step: "bio_schedule", data: { group_id: ctx.match[1] } });
-        await ctx.answerCallbackQuery();
-        return ctx.reply("Kun, vaqt va daqiqa yuboring: 0 20:00 90\n0=yakshanba, 1=dushanba, 2=seshanba, 3=chorshanba, 4=payshanba, 5=juma, 6=shanba. Toshkent vaqti.");
+        return groupSettings(ctx, ctx.match[1]);
       });
       bot.callbackQuery(/^bk:([a-f\d]{24})$/, async (ctx) => {
         await admin(ctx);
@@ -4348,25 +4414,17 @@ Qayta topshirish uchun admin ruxsati kerak.${ctx.chat.type === "private" ? "\nVa
         const s = getSession(ctx.from.id), g = await Group.findById(ctx.match[1]);
         if (s?.step !== "bio_group" || !g?.enabled) throw new InputError("Mock yoki guruh tanlovi eskirgan.");
         s.data.group_id = g._id;
-        s.step = "bio_plan";
+        s.step = "bio_label";
         setSession(ctx.from.id, s);
-        const kb = new InlineKeyboard();
-        if (s.data.count === 50) kb.text("\u{1F4C5} Haftalik navbatga", "bp:weekly").row();
-        kb.text("\u25B6\uFE0F Hozir boshlash", "bp:now").row().text("\u{1F552} Sana belgilash", "bp:date");
         await ctx.answerCallbackQuery();
-        return ctx.reply("Mockni qachon yuboramiz?", { reply_markup: kb });
+        return ctx.reply(`O\u2018quvchilar ko\u2018radigan MOCK nomini yuboring.
+Hozirgi nom: ${s.data.title}
+Shu nomni qoldirish uchun - yuboring.`);
       });
       bot.callbackQuery(/^bp:(weekly|now|date)$/, async (ctx) => {
         await admin(ctx);
-        const s = getSession(ctx.from.id);
-        if (s?.step !== "bio_plan") throw new InputError("Bu tanlov eskirgan.");
-        if (ctx.match[1] === "weekly" && s.data.count !== 50) throw new InputError("Haftalik mock 50 savollik bo\u2018lsin.");
-        s.data.plan = ctx.match[1];
         await ctx.answerCallbackQuery();
-        if (s.data.plan !== "date") return wizardPreview(ctx, s);
-        s.step = "bio_date";
-        setSession(ctx.from.id, s);
-        return ctx.reply("Boshlanish / tugash: YYYY-MM-DD HH:mm / YYYY-MM-DD HH:mm\nMasalan: 2026-11-22 20:00 / 2026-11-22 21:30 (Toshkent).\nFaqat boshlanish berilsa, guruhdagi davomiylik olinadi.");
+        return ctx.reply("Vaqt tanlash olib tashlangan. MOCKni qayta tanlang: har kuni 07:00\u201322:00 ochiq bo\u2018ladi.");
       });
       bot.callbackQuery(/^bpub:([a-f\d]{24})$/, async (ctx) => {
         await admin(ctx);
@@ -4374,24 +4432,43 @@ Qayta topshirish uchun admin ruxsati kerak.${ctx.chat.type === "private" ? "\nVa
         if (s?.step !== "bio_publish" || s.data._id !== ctx.match[1]) throw new InputError("Bu saqlash tugmasi eskirgan. /menu orqali tekshiring.");
         const d = s.data, g = await Group.findById(d.group_id);
         if (!g?.enabled) throw new InputError("Guruh ulanmagan.");
-        const start = d.plan === "now" ? new Date(Math.ceil(Date.now() / 6e4) * 6e4) : d.plan === "date" ? new Date(d.starts_at) : null;
-        if (start && start < /* @__PURE__ */ new Date()) throw new InputError("Tanlangan boshlanish vaqti o\u2018tdi. /cancel va qayta yarating.");
         const imported = d.package_id ? catalog.snapshot(await require_postgres().BioPackage.findById(d.package_id)) : {};
+        const existing = d.package_id && await Mock.findOne({ package_id: d.package_id, group_id: g._id, status: "daily" });
+        if (existing) {
+          d._id = existing._id;
+          await Mock.updateOne({ _id: d._id }, { $set: { title: d.title, topics: d.topics || [] } });
+        }
         if (!await Mock.exists({ _id: d._id })) await Mock.create({
           ...imported,
           _id: d._id,
           code: randomBytes(3).toString("hex"),
           title: d.title,
+          topics: d.topics || [],
           count: d.count,
           materials: d.materials,
           answer_key: d.answer_key,
           group_id: g._id,
-          status: start ? "scheduled" : "queued",
-          ...start ? { starts_at: start, ends_at: d.ends_at ? new Date(d.ends_at) : new Date(start.getTime() + g.duration * 6e4) } : {}
+          status: "daily",
+          kind: "daily"
         });
+        await Group.updateOne({ _id: g._id }, { $set: { daily_mode: true, weekly_enabled: false } });
+        const saved = await Mock.findById(d._id);
+        await service.delivered(`bio:catalog:${saved._id}`, async () => {
+          const message = await ctx.api.sendMessage(
+            g.chat_id,
+            `\u{1F9EC} ${saved.title} \xB7 #${saved.code}
+Mavzu: ${(saved.topics || []).join(", ")}
+${saved.count} savol \xB7 Har kuni 07:00\u201322:00
+Natijalar 22:10 da ilovada ochiladi.`,
+            { reply_markup: new InlineKeyboard().text("\u{1F64B} Qatnashaman", `bjoin:${saved.code}`) }
+          );
+          await Mock.updateOne({ _id: saved._id }, { $set: { announcement_id: message.message_id } });
+          return message;
+        });
+        for (const [i, material] of (saved.materials || []).entries()) await service.delivered(`bio:catalog:${saved._id}:file:${i}`, () => sendMaterial(ctx.api, g.chat_id, material));
         clearSession(ctx.from.id);
         await ctx.answerCallbackQuery({ text: "Mock saqlandi." });
-        return menu(ctx, start ? `\u2705 Mock ${localTime(start)} ga rejalashtirildi.` : `\u2705 50 savollik mock haftalik navbatga qo\u2018shildi.${g.weekly_enabled ? "" : " Guruh sozlamalaridan haftalik jadvalni yoqing."}`);
+        return menu(ctx, "\u2705 MOCK qo\u2018shildi. Har kuni 07:00\u201322:00 ochiq, natijalar 22:10 da.");
       });
       registerImportUI(bot, { admin, showGroups, menu, download: options.downloadImport });
       bot.on("message", async (ctx) => {
@@ -4460,17 +4537,104 @@ var require_auth = __commonJS({
   }
 });
 
+// src/biology/rooms.js
+var require_rooms = __commonJS({
+  "src/biology/rooms.js"(exports, module) {
+    var { randomBytes } = require_crypto();
+    var { BioRoom: Room, BioMock: Mock, BioSubmission: Submission, BioAttempt: Attempt, BioProfile: Profile, BioGroup: Group, roomAction } = require_postgres();
+    var { InputError } = require_domain();
+    var service = require_service();
+    var errors = { rate: "Juda ko\u2018p xona urinishlari. Keyingi soatda qayta urinib ko\u2018ring.", membership: "Avval shu guruhga qo\u2018shiling.", capacity: "Xona 2 yoki 3 kishilik bo\u2018ladi.", busy: "Sizda hali tugamagan xona yoki urinish bor.", missing: "Xona topilmadi. Kodni tekshiring.", closed: "Xona yopilgan yoki muddati tugagan.", full: "Xona to\u2018lgan.", owner: "Faqat xona egasi boshlaydi.", waiting: "Barcha qatnashchilar qo\u2018shilishini kuting.", hours: "Musobaqalar 07:00\u201322:00 oralig\u2018ida ochiq.", paper: "Bu MOCK musobaqa uchun ochiq emas.", used: "Bu MOCKni qatnashchilardan biri ishlagan yoki boshlab qo\u2018ygan. Boshqasini tanlang." };
+    async function authorize(api, user, groupId) {
+      const g = await Group.findById(groupId);
+      await service.enroll(api, user, g);
+      return g;
+    }
+    async function candidates(room) {
+      const mocks = await Mock.find({ group_id: room.group_id, status: "daily" }).sort({ createdAt: -1 }).limit(1e3);
+      const all = await Mock.find({});
+      const byId = new Map(all.map((m) => [m._id, m]));
+      const rows = await Submission.find({ telegram_id: { $in: room.members } });
+      const attempts = await Attempt.find({ telegram_id: { $in: room.members }, state: "active", ends_at: { $gt: /* @__PURE__ */ new Date() } });
+      const used = new Set([...rows, ...attempts].map((s) => {
+        const m = byId.get(s.mock_id);
+        return m?.package_id || s.mock_id;
+      }));
+      return mocks.filter((m) => m.questions && !used.has(m.package_id || m._id)).map((m) => ({ run_id: m._id, title: m.title, topics: m.topics || [], question_count: m.count }));
+    }
+    async function state(api, user, id) {
+      const room = await Room.findById(id);
+      if (!room || !room.members.includes(user.id)) throw new InputError("Bu xona sizga tegishli emas.");
+      await authorize(api, user, room.group_id);
+      const profiles = await Profile.find({ telegram_id: { $in: room.members } }), names = new Map(profiles.map((p) => [p.telegram_id, p.name]));
+      const submissions = room.run_id ? await Submission.find({ mock_id: room.run_id }) : [];
+      const allDone = submissions.length === room.members.length && room.state !== "waiting";
+      const expired = room.state === "waiting" ? new Date(room.expires_at) <= /* @__PURE__ */ new Date() : room.state === "active" && new Date(room.ends_at) <= /* @__PURE__ */ new Date();
+      const status = allDone ? "finished" : expired ? "expired" : room.state;
+      const result = {
+        id: room._id,
+        code: room.code,
+        state: status,
+        capacity: room.capacity,
+        is_host: room.host_id === user.id,
+        run_id: room.run_id,
+        title: room.title,
+        ends_at: room.ends_at,
+        expires_at: room.expires_at,
+        members: room.members.map((id2) => ({ id: id2, name: names.get(id2) || "O\u2018quvchi", is_me: id2 === user.id, submitted: submissions.some((s) => s.telegram_id === id2) }))
+      };
+      if (status === "waiting" && result.is_host) result.mocks = await candidates(room);
+      if (allDone) {
+        result.scores = submissions.map((s) => ({ id: s.telegram_id, name: s.name, correct: s.correct, total: s.total, submitted_at: s.submitted_at })).sort((a, b) => b.correct - a.correct || a.id - b.id);
+        const best = result.scores[0]?.correct;
+        result.winners = result.scores.filter((s) => s.correct === best).map((s) => s.id);
+      }
+      return result;
+    }
+    async function mutate(api, user, action, body) {
+      let room;
+      if (action === "create") await authorize(api, user, body.group_id);
+      else {
+        room = action === "join" ? await Room.findOne({ code: String(body.code || "").trim().toUpperCase() }) : await Room.findById(body.room_id);
+        if (!room) throw new InputError(errors.missing);
+        await authorize(api, user, room.group_id);
+      }
+      if (action === "start") {
+        if (room.host_id !== user.id) throw new InputError(errors.owner);
+        for (const id of room.members) await authorize(api, { id }, room.group_id);
+      }
+      const payload = {
+        group_id: body.group_id,
+        capacity: Number(body.capacity),
+        room_id: room?._id,
+        run_id: body.run_id,
+        code: action === "create" ? randomBytes(4).toString("hex").toUpperCase() : String(body.code || "").trim().toUpperCase(),
+        new_id: randomBytes(12).toString("hex"),
+        run_code: randomBytes(3).toString("hex")
+      };
+      if (action === "create" && ![2, 3].includes(payload.capacity)) throw new InputError(errors.capacity);
+      const r = await roomAction({ p_user: user.id, p_action: action, p_payload: payload });
+      if (!r.ok) throw new InputError(errors[r.reason] || "Xonadagi amal bajarilmadi.");
+      if (action === "leave") return { left: true };
+      return state(api, user, r.room._id);
+    }
+    module.exports = { state, mutate };
+  }
+});
+
 // src/biology/api.js
 var require_api = __commonJS({
   "src/biology/api.js"(exports, module) {
     var { Api } = require_grammy();
     var config = require_config();
-    var { BioMock: Mock, BioProfile: Profile, BioGroup: Group, BioSubmission: Submission } = require_postgres();
+    var { BioMock: Mock, BioProfile: Profile, BioGroup: Group, BioSubmission: Submission, BioRoom: Room } = require_postgres();
     var { AuthError, validateInitData, issueSession, verifySession } = require_auth();
     var { InputError } = require_domain();
     var { boundedBytes, parseJSON } = require_importer();
     var { openForUser, publicMock, reviewReady, reviewForUser } = require_catalog();
     var service = require_service();
+    var rooms = require_rooms();
+    var { windowFor, isOpen, releaseAt } = require_timing();
     function answerArray(m, choices) {
       if (!choices || typeof choices !== "object" || Array.isArray(choices)) throw new InputError("answers obyekti kerak.");
       const ids = new Set(m.questions.map((q) => q.question_id));
@@ -4497,26 +4661,67 @@ var require_api = __commonJS({
         }
         const user = verifySession((req.headers.get("authorization") || "").replace(/^Bearer /, ""), config.BOT_TOKEN);
         const api = options.api || new Api(config.BOT_TOKEN);
-        if (action === "list") {
+        if (action === "room-state") return reply({ room: await rooms.state(api, user, body.room_id), server_time: (/* @__PURE__ */ new Date()).toISOString() });
+        if (["room-create", "room-join", "room-start", "room-leave"].includes(action))
+          return reply({ room: await rooms.mutate(api, user, action.slice(5), body), server_time: (/* @__PURE__ */ new Date()).toISOString() });
+        if (action === "list" || action === "results") {
           const p = await Profile.findOne({ telegram_id: user.id });
           const groups = await Group.find({ _id: { $in: p?.group_ids || [] }, enabled: true });
-          const mocks = await Mock.find({ group_id: { $in: groups.map((g) => g._id) }, status: { $in: ["scheduled", "opening", "open"] } }).sort({ starts_at: 1 }).limit(30);
-          const submissions = await Submission.find({ telegram_id: user.id }).sort({ submitted_at: -1 }).limit(30);
-          const past = await Mock.find({ _id: { $in: submissions.map((s) => s.mock_id) }, status: { $in: ["open", "closed"] } });
-          const byId = new Map(past.map((m2) => [m2._id, m2]));
+          const all = await Mock.find({ group_id: { $in: groups.map((g) => g._id) }, status: { $in: ["daily", "scheduled", "opening", "open", "closed"] } });
+          const byId = new Map(all.map((m2) => [m2._id, m2]));
+          if (action === "results") {
+            const selected = groups.filter((g) => !body.group_id || g._id === body.group_id);
+            for (const g of selected) await service.enroll(api, user, g);
+            const ids = new Set(selected.map((g) => g._id));
+            const source = all.filter((m2) => ids.has(m2.group_id));
+            const rows = await Submission.find({ mock_id: { $in: source.map((m2) => m2._id) } }).sort({ submitted_at: -1, _id: 1 }).limit(2e3);
+            const visible = rows.filter((r) => reviewReady(byId.get(r.mock_id), Date.now(), r)).map((r) => {
+              const m2 = byId.get(r.mock_id);
+              return {
+                id: r._id,
+                run_id: r.mock_id,
+                name: r.name,
+                student_id: r.telegram_id,
+                is_me: r.telegram_id === user.id,
+                title: m2.title,
+                topics: m2.topics || [],
+                group_id: m2.group_id,
+                correct: r.correct,
+                total: r.total,
+                percent: r.percent,
+                started_at: r.started_at,
+                submitted_at: r.submitted_at,
+                kind: m2.room_id ? "room" : "daily"
+              };
+            });
+            return reply({ results: visible, groups: groups.map((g) => ({ id: g._id, title: g.title })), server_time: (/* @__PURE__ */ new Date()).toISOString() });
+          }
+          const submissions = await Submission.find({ telegram_id: user.id }).sort({ submitted_at: -1, _id: 1 }).limit(2e3);
+          const used = new Set(submissions.map((s) => byId.get(s.mock_id)?.package_id || s.mock_id));
           const history = submissions.filter((s) => byId.has(s.mock_id)).map((s) => {
             const m2 = byId.get(s.mock_id);
             return {
               run_id: m2._id,
               title: m2.title,
+              topics: m2.topics || [],
               mock_id: m2.external_mock_id || m2.code,
-              ...reviewReady(m2) ? { correct: s.correct, total: s.total, percent: s.percent } : {},
-              ends_at: m2.ends_at,
-              review_ready: reviewReady(m2),
+              ...reviewReady(m2, Date.now(), s) ? { correct: s.correct, total: s.total, percent: s.percent } : {},
+              ends_at: releaseAt(m2, s),
+              available_at: releaseAt(m2, s),
+              review_ready: reviewReady(m2, Date.now(), s),
+              started_at: s.started_at,
               submitted_at: s.submitted_at
             };
           });
-          return reply({ mocks: mocks.filter((m2) => m2.questions && new Date(m2.ends_at) > /* @__PURE__ */ new Date()).map((m2) => ({ run_id: m2._id, mock_id: m2.external_mock_id, version: m2.version, title: m2.title, question_count: m2.count, starts_at: m2.starts_at, ends_at: m2.ends_at, status: m2.status })), history, server_time: (/* @__PURE__ */ new Date()).toISOString() });
+          const activeRooms = await Room.find({ members: user.id }).sort({ created_at: -1 }).limit(10);
+          const list = all.filter((m2) => m2.questions && !m2.room_id && (m2.status === "daily" || ["scheduled", "opening", "open"].includes(m2.status) && new Date(m2.ends_at) > /* @__PURE__ */ new Date()) && !used.has(m2.package_id || m2._id));
+          return reply({
+            mocks: list.map((m2) => ({ run_id: m2._id, mock_id: m2.external_mock_id, version: m2.version, title: m2.title, topics: m2.topics || [], question_count: m2.count, ...windowFor(m2), status: m2.status, is_open: isOpen(m2) })),
+            history,
+            groups: groups.map((g) => ({ id: g._id, title: g.title })),
+            rooms: activeRooms.map((r) => ({ id: r._id, code: r.code, state: r.state, title: r.title, ends_at: r.ends_at, expires_at: r.expires_at })),
+            server_time: (/* @__PURE__ */ new Date()).toISOString()
+          });
         }
         if (!["start", "submit", "review"].includes(action)) return reply({ error: "Topilmadi." }, 404);
         if (!/^[a-f0-9]{24}$/.test(body.run_id || "")) throw new InputError("Mock tanlanmagan.");
@@ -4529,8 +4734,8 @@ var require_api = __commonJS({
         if (!m?.questions || body.mock_id !== m.external_mock_id || body.version !== m.version) throw new InputError("MOCK ID yoki version mos kelmadi.");
         await service.enroll(api, user, await Group.findById(m.group_id));
         if (!/^[a-f0-9]{32}$/.test(body.nonce || "")) throw new InputError("Urinish kaliti yaroqsiz.");
-        service.accepted(await service.accept(m, user, answerArray(m, body.answers), body.nonce));
-        return reply({ ok: true, received: true, results_available_at: m.ends_at, mock_id: m.external_mock_id, version: m.version });
+        const accepted = service.accepted(await service.accept(m, user, answerArray(m, body.answers), body.nonce));
+        return reply({ ok: true, received: true, results_available_at: accepted.available_at || releaseAt(m), room_id: m.room_id, mock_id: m.external_mock_id, version: m.version });
       } catch (e) {
         if (e instanceof AuthError) return reply({ error: e.message }, 401);
         if (e instanceof InputError) return reply({ error: e.message }, 400);

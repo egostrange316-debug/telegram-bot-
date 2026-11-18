@@ -9,7 +9,7 @@ const {issueSession}=require('../src/biology/auth');
 module.exports=async({msg,cb,owner,student,bot,checks,db})=>{
  const ok=(v,label)=>{assert.ok(v,label);checks.push(label);};
  const {BioGroup:Group}=require('../src/storage/postgres');
- const g=await Group.create({chat_id:-100991000070,title:'Ranking fixture'}),who=991000070;
+ const g=await Group.create({chat_id:-100991000070,title:'Ranking fixture',daily_mode:false}),who=991000070;
  const base=validatePackage(require('../examples/mock-30/import.json').mock,require('../examples/mock-30/import.json').answer_key);
  let number=0;
  const paper=async(ends_at,correct)=>{

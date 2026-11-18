@@ -4,7 +4,7 @@
 const { randomBytes } = require('crypto');
 let rpc;
 function configureDatabase(call) { rpc = call; }
-const dates = new Set(['createdAt', 'updatedAt', 'subscription_end_date', 'expires_at', 'submitted_at', 'accepted_at', 'draft_until', 'analyzed_at', 'finished_at', 'completed_at', 'lease_until', 'paid_at', 'paid_through', 'starts_at', 'ends_at', 'closed_at']);
+const dates = new Set(['createdAt', 'updatedAt', 'subscription_end_date', 'expires_at', 'submitted_at', 'accepted_at', 'draft_until', 'analyzed_at', 'finished_at', 'completed_at', 'lease_until', 'paid_at', 'paid_through', 'starts_at', 'ends_at', 'closed_at', 'available_at', 'started_at']);
 function revive(value, key) {
   if (value == null) return value;
   if (dates.has(key) && typeof value === 'string') return new Date(value);
@@ -95,12 +95,14 @@ model('LinkCode', 'bot_link_codes', {}, false);
 model('ScreenshotResult', 'bot_screenshot_results', { needs_analysis: false, read_count: 1, report_chats: [] });
 model('AttendanceReport', 'bot_attendance_reports', { result_ids: [] }, false);
 model('BioProfile', 'bio_profiles', { group_ids: [], mode: 'student' });
-model('BioGroup', 'bio_groups', { enabled: true, weekly_enabled: false, weekday: 0, time: '20:00', duration: 90 });
+model('BioGroup', 'bio_groups', { enabled: true, daily_mode: true, weekly_enabled: false, weekday: 0, time: '20:00', duration: 90 });
 model('BioMock', 'bio_mocks', { status: 'draft', materials: [], roster: [] });
 model('BioSubmission', 'bio_submissions');
 model('BioPackage', 'bio_packages', { status: 'draft' });
 model('BioAttempt', 'bio_attempts');
+model('BioRoom', 'bio_rooms');
+const roomAction = args => rpc('bio_room_action', args);
 const deleteBiologyPackage = args => rpc('bio_delete_package', args);
 const beginBiology = args => rpc('bio_begin', args);
 const submitBiology = args => rpc('bio_submit_v2', args);
-module.exports = { ...models, configureDatabase, revive, project, submitBiology, beginBiology, deleteBiologyPackage };
+module.exports = { ...models, configureDatabase, revive, project, submitBiology, beginBiology, deleteBiologyPackage, roomAction };

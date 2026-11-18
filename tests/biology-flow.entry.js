@@ -44,10 +44,13 @@ module.exports = async function run(rpc, db) {
     await msg(owner,null,{document:{file_id:'fixture-paper',file_name:'biology.pdf',mime_type:'application/pdf'}});
     await msg(owner,B.done);await msg(owner,answerText(key));
     let session=await models.BotSession.findOne({telegram_id:owner});const mid=session.data.data._id;
-    await cb(owner,`bk:${mid}`);await cb(owner,`bgpick:${g._id}`);await cb(owner,'bp:weekly');await cb(owner,`bpub:${mid}`);
+    await cb(owner,`bk:${mid}`);await cb(owner,`bgpick:${g._id}`);await msg(owner,'Biology 50');await msg(owner,'Hujayra');await cb(owner,`bpub:${mid}`);
     let m=await Mock.findById(mid);
-    ok(m.status==='queued'&&m.count===50&&m.answer_key.length===50,'admin wizard freezes a complete paper and confirmed key');
+    ok(m.status==='daily'&&m.count===50&&m.answer_key.length===50,'admin wizard freezes a complete paper and confirmed key');
     await cb(owner,`bpub:${mid}`);ok(await Mock.countDocuments({})===1,'repeated publish callback cannot duplicate a mock');
+    // Exercise legacy scheduled records after checking the new daily publish wizard.
+    await Mock.updateOne({_id:mid},{$set:{status:'queued'}});
+    await Group.updateOne({_id:g._id},{$set:{daily_mode:false}});
     const now=new Date();const local=new Date(now.getTime()+5*3600_000);const hm=local.toISOString().slice(11,16);
     await Group.updateOne({_id:g._id},{$set:{weekly_enabled:true,weekday:local.getUTCDay(),time:hm}});
     failGroup=true;await service.tick(bot.api,now);m=await Mock.findById(mid);
@@ -100,9 +103,10 @@ module.exports = async function run(rpc, db) {
     await require('./review-flow')({msg,cb,bot,checks,calls});
     await require('./deletion-ranking-flow')({msg,cb,owner,student,bot,checks,db});
     await require('./schedule-flow')(checks);
+    await require('./daily-rooms-flow')({msg,cb,owner,student,bot,checks,db});
     return {ok:true,checks};
   } finally {
     await db.exec('reset role');
-    await db.exec("delete from public.enzo_documents_store where collection in ('bio_profiles','bio_groups','bio_mocks','bio_submissions','bio_attempts','bio_packages','bot_sessions','bot_job_logs')");
+    await db.exec("delete from public.enzo_documents_store where collection in ('bio_profiles','bio_groups','bio_mocks','bio_submissions','bio_attempts','bio_packages','bio_rooms','bot_sessions','bot_job_logs')");
   }
 };
