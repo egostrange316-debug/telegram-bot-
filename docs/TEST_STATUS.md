@@ -1,3 +1,13 @@
+# Shaxsiy natijalar va qoramtir dizayn — 2026-11-19
+
+- `POST /api/results` faqat Telegram imzosi bilan tasdiqlangan akkauntning natijalarini bazadan oladi. So‘rovga boshqa `telegram_id`/`student_id` qo‘shish natijani o‘zgartirmaydi. Guruh a’zoligi va 22:10 gacha yashirish tekshiruvlari saqlangan.
+- Mini Appda **Natijalarim** va shaxsiy haftalik jami; umumiy kunlik reyting 22:10 da guruhga yuboriladi, undan keyingi tugma har kimning shaxsiy natijalarini ochadi. Yakunlangan haftaning umumiy reytingi guruhda qoladi. Xona yakuniy hisobi faqat uning qatnashchilariga ko‘rinadi.
+- Qora/yashil fon, yorqin yashil tugmalar, o‘qilishi qulay kartalar, tanlangan variant va xato/to‘g‘ri tahlil ranglari yangilandi. Telefon kengligida uy sahifasi, shaxsiy natijalar va tanlangan test varianti sintetik fixture bilan tekshirildi; fixture joylanadigan paketdan olib tashlandi.
+- `npm run test:biology`: **172 PASS**; `npm run test:unit`: **80 PASS**. Begona ID bilan natija so‘rash, o‘z natijasini olish va guruh reytingi/tugmasini takrorlamasdan yuborish tekshirildi. Mini App DOM sinovlari, JavaScript sintaksisi va Edge bundle yig‘ilishi — PASS. Telegram/Gemini so‘rovlari testlarda soxta.
+- Supabase `enzo-bot` **v14 ACTIVE**; Mini App **Sites 4-versiya** muvaffaqiyatli joylandi. Baza migratsiyasi talab qilinmadi; jonli bazaga sinov ma’lumotlari kiritilmadi. Haqiqiy Telegram akkaunti bilan to‘liq telefon sessiyasi bajarilmadi.
+
+---
+
 # Kunlik MOCK, natijalar lentasi va musobaqa — 2026-11-19
 
 - Har kuni 07:00–22:00 (Asia/Tashkent), oddiy ball/tahlil 22:10. Baza soati mustaqil tekshiradi; topshirish javobi ballsiz. Xabar faqat natijalar sahifasi tugmasi, kuniga bir marta. Admin sanalar o‘rniga nom/mavzularni kiritadi; mavjud metadata uchun alohida tugma bor.

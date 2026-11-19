@@ -17,7 +17,7 @@ Bot guruhga hali ulanmagan bo‘lsa: botni guruh admini qiling, guruhda `/ulash`
 
 **O‘chirish:** tasdiqlangach MOCKning barcha rejalashtirilgan/o‘tkazilgan nusxalari, javoblari, urinishlari, natijalari va tahlili olib tashlanadi. U ilova, **Natijalarim** va reytingdan yo‘qoladi; eski havolalari yopiladi. Bu amal qaytarilmaydi. Boshqa MOCKlar saqlanadi. Faqat boshlanmagan bitta yuborishni bekor qilish uchun **Mocklar navbati**dan foydalaning.
 
-**Reyting:** guruhga 22:10 da faqat **Natijangizni ko‘rish** tugmasi yuboriladi. Ilovadagi **Natijalar** sahifasi sana, ism, test, boshlash/topshirish vaqti va ballni ko‘rsatadi. **Haftalik yakun** oxirgi tugagan dushanba–yakshanbani jamlaydi. Eski Telegram xabarlari o‘zgarmaydi.
+**Reyting:** guruhga 22:10 da kunlik reyting va **Natijangizni ko‘rish** tugmasi yuboriladi. Ilovadagi **Natijalarim** sahifasi faqat shu akkauntning sana, test, boshlash/topshirish vaqti va ballini ko‘rsatadi. **Haftalik yakun** oxirgi tugagan dushanba–yakshanbani jamlaydi. Eski Telegram xabarlari o‘zgarmaydi.
 
 **Musobaqa:** ilovadan 2 yoki 3 kishilik xona yarating; do‘stlar 8 belgili kod bilan qo‘shiladi. Hamma qo‘shilgach egasi hech kim ishlamagan testni tanlab boshlaydi. 60 daqiqagacha, 22:00 dan kech emas. Hamma topshirsa g‘olib/teng ball bo‘lsa durang chiqadi. Javoblar kaliti 22:10 gacha yopiq. Kutish xonasi 30 daqiqada tugaydi; to‘liq topshirilmagan musobaqada g‘olib e’lon qilinmaydi.
 
@@ -131,7 +131,7 @@ Javob kalitini HTML/JavaScript yoki ochiq JSONga **kiritmang**; CSS bilan yashir
 Mavjud API manzili: `https://sxcdniihidqfqivfijtn.supabase.co/functions/v1/enzo-bot/api`. Barcha so‘rovlar POST, JSON. `/session`ga Telegram `init_data` yuboriladi; qolgan so‘rovlar qaytgan `token` bilan `Authorization: Bearer TOKEN` orqali autentifikatsiyalanadi. Oddiy Telegram ID yuborish kirish huquqini bermaydi. Boshqa HTML domenidan foydalanilsa, serverning ruxsat etilgan Mini App origini ham moslanishi kerak.
 
 - `/submit`: mavjud `run_id`, `mock_id`, `version`, `nonce`, `answers` formatini saqlaydi. Muvaffaqiyatli javob: `{"ok":true,"received":true,"results_available_at":"ISO vaqt","mock_id":"BIO-...","version":1}`. Ball yoki to‘g‘ri javoblar qaytmaydi.
-- `/results`: faqat joriy guruh a’zolariga ochilgan natijalar; kalitlar yo‘q.
+- `/results`: faqat server sessiyasidagi Telegram IDga tegishli ochilgan natijalar; mijoz yuborgan boshqa ID ishlatilmaydi. Kalitlar yo‘q.
 - `/room-create`, `/room-join`, `/room-start`, `/room-leave`, `/room-state`: Telegram sessiyasi bilan himoyalangan musobaqa API.
 - `/list`: `history` ichida faqat shu akkaunt topshirgan testlar bor. `review_ready:false` bo‘lsa ball maydonlari yo‘q; tugagach `correct`, `total`, `percent` beriladi.
 - `/review`: `{"run_id":"24 belgili ichki test IDsi"}` yuboring. Server umumiy `ends_at` o‘tganini va aynan shu akkaunt topshirganini tekshiradi. Muddatgacha xato javobi keladi; savol/kalit berilmaydi.

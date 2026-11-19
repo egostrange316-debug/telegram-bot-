@@ -111,8 +111,8 @@ function renderResults(){
     const eligible=rows.filter(r=>new Date(r.submitted_at)>=start&&new Date(r.submitted_at)<end);const sums=new Map();
     for(const r of eligible){const key=r.student_id||r.name,v=sums.get(key)||{...r,correct:0,total:0,tests:0};v.correct+=r.correct;v.total+=r.total;v.tests++;sums.set(key,v);}
     $('resultFeed').append(el('div',`${localDay(start)} — ${localDay(new Date(end-1))}`,'date-divider'));
-    const sorted=[...sums.values()].sort((a,b)=>b.correct-a.correct);let place=0;
-    sorted.forEach((r,i)=>{if(!i||r.correct!==sorted[i-1].correct)place=i+1;const row=el('article',undefined,'result-row'),body=el('div');body.append(el('h3',r.name+(r.is_me?' · Siz':'')),el('p',`${r.tests} ta MOCK · Haftalik jami`));row.append(el('span',place,'result-avatar'),body,el('strong',`${r.correct}/${r.total}`,'score'));$('resultFeed').append(row);});
+    const sorted=[...sums.values()];
+    sorted.forEach(r=>{const row=el('article',undefined,'result-row'),body=el('div');body.append(el('h3','Haftalik natijangiz'),el('p',`${r.tests} ta MOCK · Haftalik jami`));row.append(el('span','✓','result-avatar'),body,el('strong',`${r.correct}/${r.total}`,'score'));$('resultFeed').append(row);});
     if(!sorted.length)empty('resultFeed','O‘tgan hafta uchun yakunlangan natija yo‘q. Joriy hafta yakuni keyingi dushanba ochiladi.');return;
   }
   const visible=rows.filter(r=>!selected||localDay(r.submitted_at)===selected);let previous='';
@@ -152,7 +152,7 @@ $('joinRoom').onclick=()=>{const code=$('roomCodeInput').value.trim().toUpperCas
 $('startRoom').onclick=()=>roomAction('start',{room_id:currentRoom.id,run_id:$('roomPaper').value});$('leaveRoom').onclick=()=>roomAction('leave',{room_id:currentRoom.id});$('arenaHome').onclick=arenaHome;
 $('copyRoom').onclick=async()=>{try{await navigator.clipboard.writeText(currentRoom.code);$('copyRoom').textContent='Nusxalandi ✓';}catch{tell('arenaError','Xona kodi: '+currentRoom.code);}};
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{if(!token){tell('notice','Telegram bot orqali kiring.');return;}if(b.dataset.tab==='welcome')home();else if(b.dataset.tab==='resultsPage')loadResults();else arenaHome();});
-(async()=>{tg?.ready();tg?.expand();tg?.setHeaderColor?.('#f5f6f1');tg?.setBackgroundColor?.('#f5f6f1');if(!tg?.initData){tell('notice','Test, natija va musobaqalarni Telegram bot orqali oching. Akkauntingiz avtomatik tasdiqlanadi.');$('openBot').hidden=false;return;}
+(async()=>{tg?.ready();tg?.expand();tg?.setHeaderColor?.('#0b100f');tg?.setBackgroundColor?.('#0b100f');if(!tg?.initData){tell('notice','Test, natija va musobaqalarni Telegram bot orqali oching. Akkauntingiz avtomatik tasdiqlanadi.');$('openBot').hidden=false;return;}
 try{const session=await request('session',{init_data:tg.initData});token=session.token;user=session.user;$('identity').textContent=user.name;
  const params=new URLSearchParams(location.search),run=params.get('run');
  if(run&&params.get('mode')==='review'){await openAnalysis(run);return;}

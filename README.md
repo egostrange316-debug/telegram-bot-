@@ -45,12 +45,12 @@ Admin tahriri uchun yana **Admin rejimi**ga qaytadi. Egaga kalit oldindan ma’l
 
 ## Natijalar va musobaqa
 
-Guruhga 22:10 dan keyin **Natijangizni ko‘rish** tugmasi yuboriladi, ballar yuborilmaydi.
+Guruhga 22:10 dan keyin umumiy **kunlik reyting** va **Natijangizni ko‘rish** tugmasi yuboriladi.
 Xabar faqat shu kuni topshirilgan natijalar bo‘lsa keladi; cron har daqiqada ishlagani
 sababli bir daqiqagacha kechikishi mumkin. Ilovadagi ochilish cron xabariga bog‘liq emas.
-**Natijalar** oynasida sana/guruh filtri va har bir topshirish uchun ism, MOCK nomi,
+**Natijalarim** oynasi faqat tizimga kirgan o‘quvchining natijalarini beradi. Sana/guruh filtri va har bir topshirish uchun ism, MOCK nomi,
 boshlash/topshirish vaqti, to‘g‘ri/umumiy va foiz bir qatorda turadi. **Haftalik yakun**
-faqat oxirgi tugagan dushanba–yakshanbani jamlaydi. O‘chirilgan testlar hisoblanmaydi.
+faqat oxirgi tugagan dushanba–yakshanbadagi shaxsiy ballarni jamlaydi. Umumiy haftalik reyting guruhga yuboriladi. O‘chirilgan testlar hisoblanmaydi.
 
 **Musobaqa → Xona yaratish → 2 yoki 3 kishi.** Do‘stlar 8 belgili kod bilan qo‘shiladi.
 Hamma qo‘shilgach xona egasi hech bir qatnashchi ishlamagan testni tanlaydi va boshlaydi.

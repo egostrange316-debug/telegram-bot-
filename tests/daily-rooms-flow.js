@@ -44,10 +44,11 @@ module.exports=async({msg,cb,owner,bot,checks,db})=>{
   await service.publishDaily(delivery,g,new Date());ok(!sent.length,'group results reminder never sends before 22:10');
   await at('22:10:00');let review=await api(u,'review',{run_id:one.m._id});
   ok(review.status===200&&review.data.result.correct===30,'22:10 unlocks authenticated read-only analysis');
-  const board=(await api(v,'results')).data;
-  ok(board.results.length===1&&board.results[0].name==='Daily '+u&&board.results[0].correct===30&&board.results[0].submitted_at==='2031-02-04T03:17:00.000Z','shared app results bind each name, paper, score and submission time in one row');
+  const board=(await api(u,'results')).data;
+  ok((await api(v,'results',{telegram_id:u,student_id:u})).data.results.length===0,'another member cannot read a student score or override the signed-in ID');
+  ok(board.results.length===1&&board.results[0].name==='Daily '+u&&board.results[0].correct===30&&board.results[0].submitted_at==='2031-02-04T03:17:00.000Z','personal results bind only the signed-in student’s paper, score and submission time');
   await service.publishDaily(delivery,g,new Date());await service.publishDaily(delivery,g,new Date());
-  ok(sent.length===1&&sent[0].opts.reply_markup.inline_keyboard[0][0].text.includes('Natijangizni')&&!sent[0].text.includes('30/30'),'22:10 group notification is a deduplicated link without scores');
+  ok(sent.length===2&&sent[0].text.includes('30/30')&&sent[0].text.includes('Daily '+u)&&sent[1].opts.reply_markup.inline_keyboard[0][0].text.includes('Natijangizni'),'22:10 sends the daily group ranking and a personal-results button once');
   // Reopen at 08:00 for room tests; daily submissions remain immutable.
   await at('08:00:00');const duel=await paper('DUEL');
   let created=await api(u,'room-create',{group_id:g._id,capacity:2});const room=created.data.room;

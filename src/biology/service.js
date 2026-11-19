@@ -94,9 +94,8 @@ async function publishWeekly(api,group,now) {
   if(await JobLog.findOne({key:`${key}:complete`,state:'done'}))return;
   const {rows}=await periodRows(group._id,start,end,now);
   if(!rows.length)return;
-  const text=group.daily_mode ? '🏆 Haftalik yakun tayyor. Natijalar va reytingni ilovada ko‘ring.' : await weeklyText(group._id,start,now);
-  if(group.daily_mode){if(await delivered(key,()=>api.sendMessage(group.chat_id,text,{reply_markup:resultsButton()})))await delivered(`${key}:complete`,async()=>{});}
-  else if(await sendReport(api,group.chat_id,text,key))await delivered(`${key}:complete`,async()=>{});
+  const text=await weeklyText(group._id,start,now);
+  if(await sendReport(api,group.chat_id,text,key))await delivered(`${key}:complete`,async()=>{});
 }
 async function resultsText(mock) {
   const submissions = await Submission.find({ mock_id: mock._id });
@@ -138,8 +137,10 @@ async function publishDaily(api,group,now) {
   const mocks=await Mock.find({group_id:group._id,status:{$in:['daily','open','closed']}});
   const rows=await Submission.find({mock_id:{$in:mocks.map(m=>m._id)},submitted_at:{$gte:day,$lt:new Date(day.getTime()+DAY)}});
   if(!rows.length)return;
-  await delivered(`bio:daily-link:${group._id}:${localTime(day).slice(0,10)}`,()=>api.sendMessage(group.chat_id,
-    '📊 Bugungi natijalar tayyor! Kim, qachon va nechta to‘g‘ri ishlaganini ilovada ko‘ring.',{reply_markup:resultsButton()}));
+  const key=`bio:daily-link:${group._id}:${localTime(day).slice(0,10)}`;
+  if(!await sendReport(api,group.chat_id,await dailyText(group._id,now,now),`${key}:scores`))return;
+  await delivered(key,()=>api.sendMessage(group.chat_id,
+    '📊 Bugungi reyting yuqorida. O‘z natijangiz va test tahlilini ilovada ko‘ring.',{reply_markup:resultsButton()}));
 }
 async function tick(api, now = new Date()) {
   const groups = await Group.find({ enabled: true });

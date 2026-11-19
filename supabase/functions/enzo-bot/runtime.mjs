@@ -615,11 +615,8 @@ Hafta davomida yakunlangan MOCKlar yig\u2018indisi. Teng ball \u2014 teng o\u201
       if (await JobLog.findOne({ key: `${key}:complete`, state: "done" })) return;
       const { rows } = await periodRows(group._id, start, end, now);
       if (!rows.length) return;
-      const text = group.daily_mode ? "\u{1F3C6} Haftalik yakun tayyor. Natijalar va reytingni ilovada ko\u2018ring." : await weeklyText(group._id, start, now);
-      if (group.daily_mode) {
-        if (await delivered(key, () => api.sendMessage(group.chat_id, text, { reply_markup: resultsButton() }))) await delivered(`${key}:complete`, async () => {
-        });
-      } else if (await sendReport(api, group.chat_id, text, key)) await delivered(`${key}:complete`, async () => {
+      const text = await weeklyText(group._id, start, now);
+      if (await sendReport(api, group.chat_id, text, key)) await delivered(`${key}:complete`, async () => {
       });
     }
     async function resultsText(mock) {
@@ -663,9 +660,11 @@ Topshirdi: ${submissions.length}/${mock.roster.length}
       const mocks = await Mock.find({ group_id: group._id, status: { $in: ["daily", "open", "closed"] } });
       const rows = await Submission.find({ mock_id: { $in: mocks.map((m) => m._id) }, submitted_at: { $gte: day, $lt: new Date(day.getTime() + DAY) } });
       if (!rows.length) return;
-      await delivered(`bio:daily-link:${group._id}:${localTime(day).slice(0, 10)}`, () => api.sendMessage(
+      const key = `bio:daily-link:${group._id}:${localTime(day).slice(0, 10)}`;
+      if (!await sendReport(api, group.chat_id, await dailyText(group._id, now, now), `${key}:scores`)) return;
+      await delivered(key, () => api.sendMessage(
         group.chat_id,
-        "\u{1F4CA} Bugungi natijalar tayyor! Kim, qachon va nechta to\u2018g\u2018ri ishlaganini ilovada ko\u2018ring.",
+        "\u{1F4CA} Bugungi reyting yuqorida. O\u2018z natijangiz va test tahlilini ilovada ko\u2018ring.",
         { reply_markup: resultsButton() }
       ));
     }
@@ -4150,7 +4149,7 @@ ${r.correct}/${r.total} (${r.percent}%) \xB7 bo\u2018sh: ${r.blank}
       return ctx.reply(`${g.title}
 MOCKlar har kuni 07:00\u201322:00 ochiq.
 Natijalar 22:10 da ilovada ochiladi.
-Guruhga natijani ko\u2018rish tugmasi yuboriladi. Barcha vaqtlar Toshkent bo\u2018yicha.`);
+Guruhga umumiy kunlik reyting va shaxsiy natijani ko\u2018rish tugmasi yuboriladi. Barcha vaqtlar Toshkent bo\u2018yicha.`);
     }
     async function wizardPreview(ctx, s) {
       const g = await Group.findById(s.data.group_id);
@@ -4674,7 +4673,7 @@ var require_api = __commonJS({
             for (const g of selected) await service.enroll(api, user, g);
             const ids = new Set(selected.map((g) => g._id));
             const source = all.filter((m2) => ids.has(m2.group_id));
-            const rows = await Submission.find({ mock_id: { $in: source.map((m2) => m2._id) } }).sort({ submitted_at: -1, _id: 1 }).limit(2e3);
+            const rows = await Submission.find({ mock_id: { $in: source.map((m2) => m2._id) }, telegram_id: user.id }).sort({ submitted_at: -1, _id: 1 }).limit(2e3);
             const visible = rows.filter((r) => reviewReady(byId.get(r.mock_id), Date.now(), r)).map((r) => {
               const m2 = byId.get(r.mock_id);
               return {

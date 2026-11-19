@@ -43,12 +43,12 @@ async function handleApi(req, options={}) {
       const all=await Mock.find({group_id:{$in:groups.map(g=>g._id)},status:{$in:['daily','scheduled','opening','open','closed']}});
       const byId=new Map(all.map(m=>[m._id,m]));
       if(action==='results') {
-        // Group-wide results are available only to current Telegram members.
+        // Scope at the database query to the signed-in user; never accept a client student ID.
         const selected=groups.filter(g=>!body.group_id||g._id===body.group_id);
         for(const g of selected)await service.enroll(api,user,g);
         const ids=new Set(selected.map(g=>g._id));
         const source=all.filter(m=>ids.has(m.group_id));
-        const rows=await Submission.find({mock_id:{$in:source.map(m=>m._id)}}).sort({submitted_at:-1,_id:1}).limit(2000);
+        const rows=await Submission.find({mock_id:{$in:source.map(m=>m._id)},telegram_id:user.id}).sort({submitted_at:-1,_id:1}).limit(2000);
         const visible=rows.filter(r=>reviewReady(byId.get(r.mock_id),Date.now(),r)).map(r=>{
           const m=byId.get(r.mock_id);return {id:r._id,run_id:r.mock_id,name:r.name,student_id:r.telegram_id,is_me:r.telegram_id===user.id,title:m.title,topics:m.topics||[],group_id:m.group_id,
             correct:r.correct,total:r.total,percent:r.percent,started_at:r.started_at,submitted_at:r.submitted_at,kind:m.room_id?'room':'daily'};

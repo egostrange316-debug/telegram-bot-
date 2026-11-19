@@ -154,7 +154,7 @@ async function groupSettings(ctx, id) {
   await admin(ctx);
   const g = await Group.findById(id);
   if (!g?.enabled) throw new InputError('Guruh ulanmagan.');
-  return ctx.reply(`${g.title}\nMOCKlar har kuni 07:00–22:00 ochiq.\nNatijalar 22:10 da ilovada ochiladi.\nGuruhga natijani ko‘rish tugmasi yuboriladi. Barcha vaqtlar Toshkent bo‘yicha.`);
+  return ctx.reply(`${g.title}\nMOCKlar har kuni 07:00–22:00 ochiq.\nNatijalar 22:10 da ilovada ochiladi.\nGuruhga umumiy kunlik reyting va shaxsiy natijani ko‘rish tugmasi yuboriladi. Barcha vaqtlar Toshkent bo‘yicha.`);
 }
 async function wizardPreview(ctx, s) {
   const g = await Group.findById(s.data.group_id);
