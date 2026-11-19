@@ -3,11 +3,35 @@ const API='https://sxcdniihidqfqivfijtn.supabase.co/functions/v1/enzo-bot/api';
 const $=id=>document.getElementById(id), tg=window.Telegram?.WebApp;
 let token='',user=null,mock=null,attempt=null,choices={},index=0,offset=0,busy=false,expired=false;
 let analysis=null,analysisIndex=0,listData=null,currentRoom=null,resultsData=null,resultsMode='daily',roomBusy=false;
-const display=id=>{for(const x of ['welcome','resultsPage','arena','exam','review','result','analysis'])$(x).hidden=x!==id;$('bottomNav').hidden=['exam','review'].includes(id);document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));window.scrollTo({top:0,behavior:'smooth'});};
+// Motion is decorative: never delays answers, navigation or server requests.
+const reducedMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)');
+const activeMotion=new Set(),motionByElement=new WeakMap();
+let pendingRequests=0,roomMotionKey='';
+function motion(node,frames,options={}) {
+  if(!node?.animate||reducedMotion?.matches||document.hidden||node.closest('[hidden]'))return;
+  motionByElement.get(node)?.cancel();
+  const animation=node.animate(frames,{duration:320,easing:'cubic-bezier(.2,.75,.25,1)',...options});
+  activeMotion.add(animation);motionByElement.set(node,animation);
+  animation.onfinish=animation.oncancel=()=>{activeMotion.delete(animation);if(motionByElement.get(node)===animation)motionByElement.delete(node);};
+}
+function stopMotion(){for(const animation of activeMotion)animation.cancel();activeMotion.clear();}
+reducedMotion?.addEventListener?.('change',e=>{if(e.matches)stopMotion();});
+document.addEventListener('visibilitychange',()=>{document.body.classList.toggle('motion-paused',document.hidden);if(document.hidden)stopMotion();});
+function reveal(target,selector){
+  [...$(target).querySelectorAll(selector)].slice(0,12).forEach((node,i)=>motion(node,
+    [{opacity:0,transform:'translateY(12px)'},{opacity:1,transform:'translateY(0)'}],{delay:Math.min(i*45,225),fill:'backwards'}));
+}
+function questionMotion(node,key){
+  if(node.dataset.motionKey===key)return;node.dataset.motionKey=key;
+  motion(node,[{opacity:.45,transform:'translateX(10px)'},{opacity:1,transform:'translateX(0)'}],{duration:220});
+}
+const display=id=>{for(const x of ['welcome','resultsPage','arena','exam','review','result','analysis'])$(x).hidden=x!==id;$('bottomNav').hidden=['exam','review'].includes(id);document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));window.scrollTo({top:0,behavior:reducedMotion?.matches?'auto':'smooth'});};
 const tell=(id,text)=>{$(id).textContent=text;$(id).hidden=!text;};
-async function request(action,body={}) {
-  const response=await fetch(`${API}/${action}`,{method:'POST',headers:{'content-type':'application/json',...(token?{authorization:`Bearer ${token}`}:{})},body:JSON.stringify(body),signal:AbortSignal.timeout(25000)});
+async function request(action,body={},quiet=false) {
+  if(!quiet){pendingRequests++;document.body.classList.add('is-loading');$('refreshMocks').setAttribute('aria-busy','true');}
+  try{const response=await fetch(`${API}/${action}`,{method:'POST',headers:{'content-type':'application/json',...(token?{authorization:`Bearer ${token}`}:{})},body:JSON.stringify(body),signal:AbortSignal.timeout(25000)});
   const data=await response.json();if(!response.ok)throw Error(data.error||'Ulanish xatosi.');if(data.server_time)offset=new Date(data.server_time).getTime()-Date.now();return data;
+  }finally{if(!quiet&&--pendingRequests===0){document.body.classList.remove('is-loading');$('refreshMocks').removeAttribute('aria-busy');}}
 }
 const date=s=>s?new Intl.DateTimeFormat('uz-UZ',{timeZone:'Asia/Tashkent',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(s)):'—';
 const cacheKey=()=>`bio:${user.id}:${mock.run_id}:${attempt.nonce}`;
@@ -17,7 +41,8 @@ function render() {
   $('answered').textContent=`${count}/${mock.question_count} ta belgilandi`;$('position').textContent=`${index+1}-savol`;
   $('progress').max=mock.question_count;$('progress').value=count;$('topic').textContent=`MAVZU ${q.source_topic}`;$('question').textContent=q.text;
   $('numbers').replaceChildren();mock.questions.forEach((q,i)=>{const b=document.createElement('button');b.textContent=i+1;b.className=(choices[q.question_id]&&choices[q.question_id]!=='-'?'done ':'')+(i===index?'active':'');b.setAttribute('aria-label',`${i+1}-savol`);if(i===index)b.setAttribute('aria-current','step');b.onclick=()=>{index=i;render();};$('numbers').append(b);});
-  $('options').replaceChildren();for(const k of ['A','B','C','D']){const b=document.createElement('button');b.className='option';b.setAttribute('aria-pressed',String(choices[q.question_id]===k));const letter=document.createElement('b');letter.textContent=k;const text=document.createElement('span');text.textContent=q.options[k];b.append(letter,text);b.disabled=expired;b.onclick=()=>{choices[q.question_id]=k;save();render();tg?.HapticFeedback?.selectionChanged();};$('options').append(b);}
+  $('options').replaceChildren();for(const k of ['A','B','C','D']){const b=document.createElement('button');b.className='option';b.setAttribute('aria-pressed',String(choices[q.question_id]===k));const letter=document.createElement('b');letter.textContent=k;const text=document.createElement('span');text.textContent=q.options[k];b.append(letter,text);b.disabled=expired;b.onclick=()=>{choices[q.question_id]=k;save();render();motion($('options').querySelector('[aria-pressed=true] b'),[{transform:'scale(.7)'},{transform:'scale(1.14)',offset:.65},{transform:'scale(1)'}],{duration:240});tg?.HapticFeedback?.selectionChanged();};$('options').append(b);}
+  questionMotion($('options').closest('.question-card'),`${mock.run_id}:${q.question_id}`);
   $('prev').disabled=index===0;$('next').disabled=index===mock.question_count-1;$('clear').disabled=expired;
 }
 function clock(){if(!mock)return;const left=Math.max(0,new Date(mock.ends_at).getTime()-(Date.now()+offset)),seconds=Math.floor(left/1000);$('clock').textContent=`${Math.floor(seconds/60).toString().padStart(2,'0')}:${(seconds%60).toString().padStart(2,'0')}`;$('clock').parentElement.classList.toggle('urgent',left<300000);
@@ -61,6 +86,7 @@ function renderAnalysis() {
     const label=document.createElement('small');label.textContent=k===q.correct_answer?(k===q.selected_answer?'✓ Sizning javobingiz · To‘g‘ri':'✓ To‘g‘ri javob'):k===q.selected_answer?'✕ Sizning javobingiz':'';
     const body=document.createElement('div');body.append(text,label);row.append(letter,body);$('analysisOptions').append(row);
   }
+  questionMotion($('analysisCard'),`${analysis.mock.run_id}:${q.question_id}`);
   $('analysisAnswer').textContent=`Sizning javobingiz: ${q.selected_answer==='-'?'belgilanmagan':q.selected_answer}. To‘g‘ri javob: ${q.correct_answer}.`;
 }
 async function openAnalysis(run_id) {
@@ -83,6 +109,7 @@ function renderMocks(){
   rows.forEach((m,i)=>{const card=el('article',undefined,'mock-card'),top=el('div',undefined,'card-top');top.append(el('span','✳','paper-mark'),el('span',m.is_open||m.status==='open'?'● Ochiq':'◷ 07:00 da ochiladi','pill'));
     const h=el('h2',m.title),p=el('p',(m.topics||[]).join(' · ')||'Biologiya');const foot=el('div',undefined,'card-footer'),b=el('button','Boshlash','button');
     b.disabled=!(m.is_open||m.status==='open');b.onclick=()=>start(m.run_id);foot.append(el('small',`${m.question_count} savol · A / B / C / D`),b);card.append(top,h,p,foot);$('mockList').append(card);});
+  reveal('mockList','.mock-card');
   if(!rows.length)empty('mockList',query?'Bu nom yoki mavzuda MOCK topilmadi.':'Hozircha ishlanmagan MOCK yo‘q. Yangi testlar shu yerda ko‘rinadi.');
 }
 function renderHistory(){
@@ -90,7 +117,7 @@ function renderHistory(){
   let previous='';for(const m of history){const day=m.submitted_at?localDay(m.submitted_at):'';if(day&&day!==previous){$('historyList').append(el('div',day,'date-divider'));previous=day;}
     const row=el('article',undefined,'history-row'),body=el('div'),b=el('button',undefined,'button');body.append(el('h3',m.title),el('p',m.review_ready?`${localClock(m.submitted_at)} · ${m.correct}/${m.total} · ${String(m.percent).replace('.',',')}%`:`${localClock(m.submitted_at)} · Saqlandi. Natija ${date(m.available_at||m.ends_at)} da.`));
     b.dataset.reviewAfter=m.available_at||m.ends_at;b.onclick=()=>openAnalysis(m.run_id);row.append(body,b);$('historyList').append(row);
-  }reviewClock();
+  }reveal('historyList','.history-row');reviewClock();
 }
 function populateGroups(id,groups,all=false){const select=$(id),previous=select.value;select.replaceChildren();if(all){const o=el('option','Barcha guruhlarim');o.value='';select.append(o);}for(const g of groups){const o=el('option',g.title);o.value=g.id;select.append(o);}if([...select.options].some(o=>o.value===previous))select.value=previous;}
 async function loadList(){
@@ -113,10 +140,12 @@ function renderResults(){
     $('resultFeed').append(el('div',`${localDay(start)} — ${localDay(new Date(end-1))}`,'date-divider'));
     const sorted=[...sums.values()];
     sorted.forEach(r=>{const row=el('article',undefined,'result-row'),body=el('div');body.append(el('h3','Haftalik natijangiz'),el('p',`${r.tests} ta MOCK · Haftalik jami`));row.append(el('span','✓','result-avatar'),body,el('strong',`${r.correct}/${r.total}`,'score'));$('resultFeed').append(row);});
+    reveal('resultFeed','.result-row');
     if(!sorted.length)empty('resultFeed','O‘tgan hafta uchun yakunlangan natija yo‘q. Joriy hafta yakuni keyingi dushanba ochiladi.');return;
   }
   const visible=rows.filter(r=>!selected||localDay(r.submitted_at)===selected);let previous='';
   for(const r of visible){const day=localDay(r.submitted_at);if(day!==previous){$('resultFeed').append(el('div',day,'date-divider'));previous=day;}$('resultFeed').append(resultRow(r));}
+  reveal('resultFeed','.result-row');
   if(!visible.length)empty('resultFeed','Bu sana uchun ochilgan natija yo‘q. Bugungi natijalar 22:10 da chiqadi.');
 }
 async function loadResults(){display('resultsPage');tell('resultsError','');try{resultsData=await request('results');populateGroups('resultGroup',resultsData.groups||[],true);
@@ -146,6 +175,13 @@ function renderRoom(){
     for(const x of r.scores){const row=el('div',undefined,'result-row');row.append(el('span',r.winners.includes(x.id)?'★':'✓','result-avatar'),el('strong',x.name),el('span',`${x.correct}/${x.total}`,'score'));$('roomScores').append(row);}
     $('roomScores').append(el('p','To‘g‘ri javoblar va to‘liq tahlil 22:10 da ochiladi.','save-note'));
   }
+  // Polling the same room must not replay entrances every five seconds.
+  const motionKey=JSON.stringify([r.id,r.state,r.members,r.scores]);
+  if(motionKey!==roomMotionKey){
+    reveal('roomMembers','.member-card');reveal('roomScores','.result-row');
+    motion($('roomScores').querySelector('.winner-banner'),[{opacity:0,transform:'scale(.95)'},{opacity:1,transform:'scale(1)'}],{duration:420});
+    roomMotionKey=motionKey;
+  }
 }
 $('createRoom').onclick=()=>roomAction('create',{group_id:$('roomGroup').value,capacity:Number($('roomCapacity').value)});
 $('joinRoom').onclick=()=>{const code=$('roomCodeInput').value.trim().toUpperCase();if(!/^[A-F0-9]{8}$/.test(code)){tell('arenaError','8 belgili xona kodini kiriting.');return;}roomAction('join',{code});};
@@ -161,5 +197,5 @@ try{const session=await request('session',{init_data:tg.initData});token=session
 }catch(e){tell('notice',e.message);$('openBot').hidden=false;}})();
 setInterval(()=>{clock();reviewClock();},1000);
 setInterval(async()=>{if(currentRoom&&!$('arena').hidden&&!roomBusy&&['waiting','active'].includes(currentRoom.state)){
- try{const data=await request('room-state',{room_id:currentRoom.id});if(currentRoom?.id===data.room.id){currentRoom=data.room;renderRoom();}}catch(e){tell('arenaError',e.message);}
+ try{const data=await request('room-state',{room_id:currentRoom.id},true);if(currentRoom?.id===data.room.id){currentRoom=data.room;renderRoom();}}catch(e){tell('arenaError',e.message);}
 }},5000);

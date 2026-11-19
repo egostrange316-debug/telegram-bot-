@@ -1,3 +1,12 @@
+# Mini App animatsiyalari — 2026-11-19
+
+- Sahifa ochilishi, MOCK/natija kartalarining ketma-ket kirishi, savol almashishi, tanlangan javob belgisi, pastki menyu va topshirish tasdig‘iga qisqa animatsiyalar qo‘shildi. Bosh sahifa bezagi qisqa aylanishdan so‘ng tinadi.
+- Yuklanish chizig‘i va yangilash belgisi faqat foydalanuvchi so‘rovi davomida ishlaydi; xatoda ham tozalanadi. Musobaqa fon so‘rovlari animatsiya ko‘rsatmaydi, bir xil xona holati kirish effektini qayta boshlamaydi.
+- `prefers-reduced-motion` CSS va JavaScriptda hisobga olinadi. Ilova yashirilganda harakatlar to‘xtaydi; animatsiyalar javobni saqlash yoki topshirishni kutdirmaydi. Qo‘shimcha kutubxona yuklanmaydi.
+- `npm run check`, `git diff --check` va mavjud 4 guruh Mini App DOM tekshiruvlari — PASS. 390 px brauzer fixtureda sahifa o‘tishi, javob tanlash, keyingi savol va ballsiz topshirish tasdig‘i tekshirildi. Fixture tarqatiladigan paketdan olib tashlandi; haqiqiy Telegram akkaunti bilan telefon sessiyasi bajarilmadi. Backend/baza o‘zgarmadi.
+
+---
+
 # Shaxsiy natijalar va qoramtir dizayn — 2026-11-19
 
 - `POST /api/results` faqat Telegram imzosi bilan tasdiqlangan akkauntning natijalarini bazadan oladi. So‘rovga boshqa `telegram_id`/`student_id` qo‘shish natijani o‘zgartirmaydi. Guruh a’zoligi va 22:10 gacha yashirish tekshiruvlari saqlangan.

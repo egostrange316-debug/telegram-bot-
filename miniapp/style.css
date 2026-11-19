@@ -29,3 +29,32 @@ body{background:radial-gradient(ellipse at 80% 0%,#19332355,transparent 45%),var
 .analysis-option.correct,#analysisNumbers button.correct{color:#d1efc2}.analysis-option.incorrect,#analysisNumbers button.incorrect{color:#ffd1c7}.error{color:var(--danger)}
 #numbers button.active,#analysisNumbers button.active{background:var(--lime);color:#102014;border-color:var(--lime)}
 .progress-label,.date-divider,.answer-summary{color:#c4d8c8}progress{accent-color:var(--lime)}.score{color:#cbeca9}.segmented button.selected{background:#29402e;color:#e8f4e2}
+
+
+/* Short, compositor-friendly motion; all controls remain immediately usable. */
+@keyframes page-arrive{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes flower-unfold{from{opacity:.2;transform:rotate(-55deg) scale(.78)}to{opacity:1;transform:rotate(0) scale(1)}}
+@keyframes orbit-settle{from{transform:rotate(-30deg)}to{transform:rotate(45deg)}}
+@keyframes nav-arrive{0%{transform:translateY(3px) scale(.85)}60%{transform:translateY(-2px) scale(1.12)}100%{transform:translateY(0) scale(1)}}
+@keyframes success-arrive{0%{opacity:0;transform:scale(.65) rotate(-12deg)}70%{opacity:1;transform:scale(1.07) rotate(3deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
+@keyframes loading-travel{from{transform:translateX(-110%)}to{transform:translateX(340%)}}
+@keyframes loading-turn{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:no-preference){
+  main>section:not([hidden]){animation:page-arrive .36s cubic-bezier(.2,.75,.25,1) both}
+  #welcome:not([hidden]) .hero-orbit span{animation:flower-unfold 1.8s cubic-bezier(.2,.75,.25,1) both}
+  #welcome:not([hidden]) .hero-orbit i{animation:orbit-settle 2.2s cubic-bezier(.2,.75,.25,1) both}
+  #arena:not([hidden]) .form-card{animation:page-arrive .42s .08s both}
+  #arena:not([hidden]) .form-card:nth-child(2){animation-delay:.15s}
+  .bottom-nav button.active span{animation:nav-arrive .32s ease-out}
+  #result:not([hidden]) .success-icon{animation:success-arrive .55s .1s both}
+  .button,.secondary,.subtle,.icon-button,.bottom-nav button,.segmented button,.option,#numbers button,#analysisNumbers button{transition:transform .16s ease,background-color .2s ease,border-color .2s ease,color .2s ease}
+  button:not(:disabled):active,a.button:active{transform:scale(.96)}
+  .mock-card{transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+  .search-box,input,select{transition:border-color .2s ease,background-color .2s ease}
+  progress::-webkit-progress-value{transition:width .3s ease}
+  #refreshMocks[aria-busy=true]{animation:loading-turn 1s linear infinite}
+  body.is-loading::before{animation:loading-travel 1.25s ease-in-out infinite}
+}
+body.is-loading::before{content:'';position:fixed;z-index:50;inset:0 auto auto 0;width:30%;height:3px;background:var(--lime);border-radius:0 3px 3px 0;pointer-events:none}
+.motion-paused *,.motion-paused::before{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}body.is-loading::before{width:100%;opacity:.7}}
