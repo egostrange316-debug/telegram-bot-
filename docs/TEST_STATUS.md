@@ -1,3 +1,13 @@
+# Ochilish va 3D fon — 2026-11-19
+
+- 2,1 soniyalik DNK/wordmark ochilish animatsiyasi, bosh sahifada aylanadigan hajmli DNK, fonda DNK, molekula va yorug‘ zarrachalar qo‘shildi. Canvas 3D koordinatalarni perspektivada chizadi, chuqurlik bo‘yicha saralaydi va sharlarni soyalar bilan ko‘rsatadi. Tashqi rasm/video yoki yangi kutubxona talab qilinmaydi.
+- Chizish 30 fps bilan cheklangan; pixel ratio telefonda 1,25, katta ekranda 1,5 gacha. Ko‘rinmayotgan asosiy DNK qayta chizilmaydi. Tab yashirilganda va test/tasdiqlash/tahlil sahifalarida harakat to‘xtaydi. Fon alohida tugma bilan o‘chiriladi va tanlov qurilmada saqlanadi; reduced-motion hurmat qilinadi.
+- Kirish effekti autentifikatsiyani kutdirmaydi, bosish yoki klaviatura bilan darhol yopiladi. Canvas ishlamasa kirish effekti ochilmaydi va botning asosiy ilovasi ishlashda davom etadi.
+- JavaScript sintaksisi, `git diff --check` va mavjud Mini App DOM tekshiruvlarining 4 guruhi — PASS. Brauzerda 390 px ko‘rinish, gorizontal overflow yo‘qligi, ochilish effektining yopilishi, fon tugmasi va testga kirganda CSS harakatining to‘xtashi tekshirildi. Testga kirish alohida sintetik fixture bilan tekshirildi; fixture tarqatiladigan paketdan olib tashlandi. Haqiqiy telefonda tezlik o‘lchanmadi, Telegram akkaunti bilan to‘liq mobil sessiya bajarilmadi.
+- Backend, javoblar kaliti, natijalar va vaqt tekshiruvlari o‘zgartirilmadi.
+
+---
+
 # Mini App animatsiyalari — 2026-11-19
 
 - Sahifa ochilishi, MOCK/natija kartalarining ketma-ket kirishi, savol almashishi, tanlangan javob belgisi, pastki menyu va topshirish tasdig‘iga qisqa animatsiyalar qo‘shildi. Bosh sahifa bezagi qisqa aylanishdan so‘ng tinadi.

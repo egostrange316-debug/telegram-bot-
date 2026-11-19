@@ -25,7 +25,7 @@ function questionMotion(node,key){
   if(node.dataset.motionKey===key)return;node.dataset.motionKey=key;
   motion(node,[{opacity:.45,transform:'translateX(10px)'},{opacity:1,transform:'translateX(0)'}],{duration:220});
 }
-const display=id=>{for(const x of ['welcome','resultsPage','arena','exam','review','result','analysis'])$(x).hidden=x!==id;$('bottomNav').hidden=['exam','review'].includes(id);document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));window.scrollTo({top:0,behavior:reducedMotion?.matches?'auto':'smooth'});};
+const display=id=>{document.body.dataset.page=id;for(const x of ['welcome','resultsPage','arena','exam','review','result','analysis'])$(x).hidden=x!==id;$('bottomNav').hidden=['exam','review'].includes(id);document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));window.scrollTo({top:0,behavior:reducedMotion?.matches?'auto':'smooth'});};
 const tell=(id,text)=>{$(id).textContent=text;$(id).hidden=!text;};
 async function request(action,body={},quiet=false) {
   if(!quiet){pendingRequests++;document.body.classList.add('is-loading');$('refreshMocks').setAttribute('aria-busy','true');}

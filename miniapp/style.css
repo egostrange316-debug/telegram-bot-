@@ -58,3 +58,65 @@ body{background:radial-gradient(ellipse at 80% 0%,#19332355,transparent 45%),var
 body.is-loading::before{content:'';position:fixed;z-index:50;inset:0 auto auto 0;width:30%;height:3px;background:var(--lime);border-radius:0 3px 3px 0;pointer-events:none}
 .motion-paused *,.motion-paused::before{animation-play-state:paused!important}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}body.is-loading::before{width:100%;opacity:.7}}
+
+/* Living laboratory: a perspective DNA sculpture and an ambient depth layer. */
+body{isolation:isolate;background:#080f0c}
+.ambient-stage{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;transition:opacity .6s ease}
+.ambient-stage canvas{display:block;width:100%;height:100%}
+.ambient-glow{position:absolute;inset:-12%;background:radial-gradient(ellipse at 80% 12%,#32724850,transparent 45%),radial-gradient(ellipse at 9% 90%,#14756135,transparent 43%);transform-origin:center}
+.app-header,main{position:relative;z-index:1}
+.header-tools{display:flex;gap:12px;align-items:center;min-width:0;max-width:48%}
+.header-tools .identity{max-width:none;min-width:0}
+.ambient-toggle{width:36px;height:36px;flex-shrink:0;display:grid;place-items:center;border:1px solid #45624b;border-radius:50%;background:#162a1dd9;color:#c8ecaf;cursor:pointer}
+.ambient-toggle svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ambient-toggle .play-glyph{display:none}
+.ambient-toggle[aria-pressed=false] .pause-glyph{display:none}
+.ambient-toggle[aria-pressed=false] .play-glyph{display:block}
+.hero{display:grid;grid-template-columns:minmax(0,1fr) 240px;column-gap:18px;padding:32px 36px 0;background:linear-gradient(125deg,#163022ed,#0b1a13e8);border-color:#4d76524d;box-shadow:inset 0 1px 0 #d0ffb80c,0 25px 80px #0003}
+.hero-copy{position:relative;z-index:1;align-self:center;min-width:0}
+.hero .hero-copy h1{font-size:clamp(29px,3.5vw,42px)}
+.hero .hero-copy .lead{font-size:15px;line-height:1.8;color:#bad0bf}
+.hero .schedule-strip{grid-column:1/-1;margin-top:22px}
+.hero-lab{height:290px;position:relative;align-self:center;isolation:isolate}
+.hero-lab canvas{width:100%;height:100%;display:block}
+.hero-lab::before{content:'';position:absolute;inset:15% 7%;border-radius:50%;background:radial-gradient(ellipse,#7fd65310,transparent 70%);z-index:-1}
+.lab-caption{position:absolute;bottom:0;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:7px;white-space:nowrap;font-size:9px;letter-spacing:2px;color:#b3d2b7}
+.lab-caption i{height:4px;width:4px;background:var(--lime);border-radius:50%;box-shadow:0 0 8px #b6eb80aa}
+.app-intro{position:fixed;inset:0;z-index:100;display:grid;place-items:center;pointer-events:none;overflow:hidden;background:radial-gradient(ellipse at 50% 42%,#193c28,#080f0c 70%)}
+.intro-content{position:relative;width:min(330px,84vw);text-align:center;display:flex;flex-direction:column;align-items:center}
+.intro-kicker{font-size:10px;letter-spacing:6px;color:#a8c5af;font-weight:600}
+#introDna{display:block;width:210px;height:235px;margin:7px auto 12px}
+.intro-content strong{font-family:Manrope,sans-serif;font-size:clamp(44px,12vw,64px);font-weight:800;letter-spacing:-3px;line-height:1.1;color:#f2f8ed}
+.intro-content strong span{color:var(--lime)}
+.intro-content p{font-size:13px;letter-spacing:2px;color:#adcaaf;margin-top:15px}
+.intro-line{display:block;width:90px;height:2px;margin-top:30px;border-radius:2px;background:linear-gradient(90deg,transparent,#c9f59d,transparent);transform-origin:left}
+.intro-orbit{position:absolute;left:50%;top:50%;width:min(700px,130vw);aspect-ratio:1;transform:translate(-50%,-50%);border:1px solid #a5de8433;border-radius:50%;box-shadow:0 0 80px #83db4510,inset 0 0 80px #83db4510}
+.intro-orbit::before,.intro-orbit::after{content:'';position:absolute;border:1px solid #a5de841a;border-radius:50%;inset:10%}
+.intro-orbit::after{inset:-12%;border-style:dashed;opacity:.6}
+@keyframes ambient-breathe{from{transform:translate3d(-2%,-1%,0) rotate(-4deg) scale(.98)}to{transform:translate3d(2%,2%,0) rotate(4deg) scale(1.06)}}
+@keyframes intro-reveal{0%,72%{opacity:1;visibility:visible}100%{opacity:0;visibility:hidden}}
+@keyframes intro-word{0%{opacity:0;transform:translateY(24px) scale(.88);letter-spacing:2px}100%{opacity:1;transform:translateY(0) scale(1);letter-spacing:-3px}}
+@keyframes intro-ring{from{opacity:0;transform:translate(-50%,-50%) scale(.6) rotate(-25deg)}to{opacity:1;transform:translate(-50%,-50%) scale(1.12) rotate(20deg)}}
+@keyframes intro-line-grow{from{transform:scaleX(0);opacity:0}to{transform:scaleX(1);opacity:1}}
+@keyframes scene-arrive{from{opacity:0;transform:perspective(900px) translateY(28px) rotateX(5deg) scale(.975)}to{opacity:1;transform:perspective(900px) translateY(0) rotateX(0) scale(1)}}
+@media(prefers-reduced-motion:no-preference){
+  .ambient-glow{animation:ambient-breathe 16s ease-in-out infinite alternate}
+  .app-intro:not([hidden]){animation:intro-reveal 2.1s ease both}
+  .app-intro:not([hidden]) .intro-orbit{animation:intro-ring 2.1s ease-out both}
+  .app-intro:not([hidden]) .intro-content strong{animation:intro-word .75s .12s cubic-bezier(.16,1,.3,1) both}
+  .app-intro:not([hidden]) .intro-content p{animation:page-arrive .6s .4s both}
+  .app-intro:not([hidden]) .intro-line{animation:intro-line-grow 1.1s .3s ease both}
+  main>section:not([hidden]){animation:scene-arrive .6s cubic-bezier(.16,1,.3,1) both;transform-origin:50% 0}
+  body[data-page=exam] main>section,body[data-page=analysis] main>section{animation-name:page-arrive;animation-duration:.3s}
+}
+body[data-scene-motion=off] .ambient-glow,body[data-page=exam] .ambient-glow,body[data-page=review] .ambient-glow,body[data-page=analysis] .ambient-glow{animation-play-state:paused}
+body[data-page=exam] .ambient-stage,body[data-page=review] .ambient-stage,body[data-page=analysis] .ambient-stage{opacity:.2}
+@media(max-width:700px){
+  .app-header{gap:10px}.header-tools{gap:8px;max-width:45%}.header-tools .identity{font-size:10px;line-height:1.35}.header-tools .online-dot{width:5px;height:5px}.ambient-toggle{width:32px;height:32px}
+  .hero{grid-template-columns:1fr;padding:25px 23px 0;row-gap:0}
+  .hero .hero-copy h1{font-size:30px;margin:12px 0 13px}.hero .hero-copy .lead{font-size:14px;line-height:1.7}
+  .hero-lab{height:190px;width:100%;margin:2px auto 0}.hero-lab canvas{max-width:250px;margin:auto}
+  .hero .schedule-strip{margin-top:16px;gap:10px 15px;padding:16px 0}.hero .schedule-strip small{font-size:12px}.hero .schedule-strip strong{font-size:13px}
+  .lab-caption{bottom:0;font-size:8px;letter-spacing:2px}
+}
+@media(prefers-reduced-motion:reduce){.app-intro{display:none!important}.ambient-glow{animation:none}.ambient-stage{transition:none}}
