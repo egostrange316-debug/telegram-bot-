@@ -120,3 +120,6 @@ body[data-page=exam] .ambient-stage,body[data-page=review] .ambient-stage,body[d
   .lab-caption{bottom:0;font-size:8px;letter-spacing:2px}
 }
 @media(prefers-reduced-motion:reduce){.app-intro{display:none!important}.ambient-glow{animation:none}.ambient-stage{transition:none}}
+
+/* Four-player rooms form two balanced rows; six-player rooms use three columns. */
+.members-grid[data-capacity="2"],.members-grid[data-capacity="4"]{grid-template-columns:repeat(2,minmax(0,1fr))}

@@ -9,6 +9,7 @@ const fs = require('node:fs');
   await db.exec(fs.readFileSync('supabase/migrations/20261115085124_biology_import.sql','utf8'));
   await require('../tests/deletion-migration')(db, fs.readFileSync('supabase/migrations/20261116144055_biology_delete_results.sql','utf8'));
   await require('../tests/daily-migration')(db,fs.readFileSync('supabase/migrations/20261118140357_biology_daily_rooms.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261120022253_biology_room_capacity_4_6.sql','utf8'));
   await db.exec('set role service_role');
   const rpc = async (name, args = {}) => {
     if(name==='bio_room_action'){const r=await db.query('select public.bio_room_action($1,$2,$3::jsonb) as result',[args.p_user,args.p_action,JSON.stringify(args.p_payload)]);return r.rows[0].result;}

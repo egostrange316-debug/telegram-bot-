@@ -52,7 +52,7 @@ sababli bir daqiqagacha kechikishi mumkin. Ilovadagi ochilish cron xabariga bog�
 boshlash/topshirish vaqti, to‘g‘ri/umumiy va foiz bir qatorda turadi. **Haftalik yakun**
 faqat oxirgi tugagan dushanba–yakshanbadagi shaxsiy ballarni jamlaydi. Umumiy haftalik reyting guruhga yuboriladi. O‘chirilgan testlar hisoblanmaydi.
 
-**Musobaqa → Xona yaratish → 2 yoki 3 kishi.** Do‘stlar 8 belgili kod bilan qo‘shiladi.
+**Musobaqa → Xona yaratish → 2, 3, 4 yoki 6 kishi.** Do‘stlar 8 belgili kod bilan qo‘shiladi.
 Hamma qo‘shilgach xona egasi hech bir qatnashchi ishlamagan testni tanlaydi va boshlaydi.
 Hamma bir xil savollarni oladi. Eng ko‘p to‘g‘ri javob g‘olib; teng ball — durang.
 Ballar va g‘olib faqat hamma topshirgach xona a’zolariga ko‘rinadi; kalit/tahlil 22:10 gacha yopiq.

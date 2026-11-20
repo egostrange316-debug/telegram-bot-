@@ -10,9 +10,9 @@ const {issueSession}=require('../src/biology/auth');
 const service=require('../src/biology/service');
 module.exports=async({msg,cb,owner,bot,checks,db})=>{
  const ok=(v,label)=>{assert.ok(v,label);checks.push(label);};
- const u=991008001,v=991008002,w=991008003,out=991008004;
+ const u=991008001,v=991008002,w=991008003,out=991008004,extra=[991008005,991008006,991008007,991008008,991008009];
  const g=await Group.create({chat_id:-100991008001,title:'Daily fixture',daily_mode:true});
- for(const id of [u,v,w])await Profile.create({telegram_id:id,name:'Daily '+id,group_ids:[g._id]});
+ for(const id of [u,v,w,...extra])await Profile.create({telegram_id:id,name:'Daily '+id,group_ids:[g._id]});
  await Profile.create({telegram_id:out,name:'Outsider',group_ids:[]});
  const originalClock='create or replace function enzo_private.bio_now() returns timestamptz language sql volatile security invoker set search_path=\'\' as $$ select clock_timestamp() $$';
  async function at(time,day='2031-02-04'){const iso=day+'T'+time+'+05:00';mockTimers.timers.reset();mockTimers.timers.enable({apis:['Date'],now:new Date(iso).getTime()});await db.exec(`create or replace function enzo_private.bio_now() returns timestamptz language sql volatile security invoker set search_path='' as $$ select '${iso}'::timestamptz $$`);}
@@ -83,6 +83,32 @@ module.exports=async({msg,cb,owner,bot,checks,db})=>{
   for(const id of [u,v,w]){const attempt=await service.begin(tm,{id});await service.accept(tm,{id},tm.answer_key,attempt.nonce);}
   state=(await api(u,'room-state',{room_id:tr.id})).data.room;
   ok(state.winners.length===3&&state.scores.length===3,'three-player equal scores produce a draw without arbitrary tie-breaking');
+  for(const capacity of [1,5,7,0,2.5])ok((await api(u,'room-create',{group_id:g._id,capacity})).status===400,`API rejects unsupported room size ${capacity}`);
+  for(const capacity of [null,5,7])ok((await raw(u,'create',{group_id:g._id,capacity})).reason==='capacity',`SQL independently rejects unsupported room size ${capacity}`);
+  for(const capacity of [4,6]){
+    const source=await paper('CAPACITY-'+capacity),created=await api(u,'room-create',{group_id:g._id,capacity});
+    ok(created.status===200&&created.data.room.capacity===capacity,`${capacity}-player room creation succeeds`);
+    const room=created.data.room,candidates=[v,w,...extra];
+    for(const id of candidates.slice(0,capacity-2))ok((await api(id,'room-join',{code:room.code})).status===200,`${capacity}-player room accepts participant ${id}`);
+    ok((await api(u,'room-start',{room_id:room.id,run_id:source.m._id})).status===400,`${capacity}-player room waits for its last participant`);
+    const race=await Promise.all(candidates.slice(capacity-2,capacity).map(id=>api(id,'room-join',{code:room.code})));
+    const stored=await Room.findById(room.id);
+    ok(race.filter(r=>r.status===200).length===1&&stored.members.length===capacity,`${capacity}-player last-seat race cannot overfill the room`);
+    ok((await api(extra.at(-1),'room-join',{code:room.code})).status===400,`${capacity}-player full room rejects an additional member`);
+    const started=await api(u,'room-start',{room_id:room.id,run_id:source.m._id});
+    ok(started.status===200&&started.data.room.state==='active'&&started.data.room.members.length===capacity,`${capacity}-player host starts one common test`);
+    const run=await Mock.findById(started.data.room.run_id);
+    for(const [i,id] of stored.members.entries()){
+      const attempt=await api(id,'start',{run_id:run._id});
+      const answers=Object.fromEntries(run.questions.map((q,k)=>[q.question_id,capacity===4&&i>0&&k<i?(run.answer_key[k]==='A'?'B':'A'):run.answer_key[k]]));
+      const submitted=await api(id,'submit',{run_id:run._id,mock_id:run.external_mock_id,version:run.version,nonce:attempt.data.attempt.nonce,answers});
+      ok(submitted.status===200&&!('correct' in submitted.data),`${capacity}-player submission is saved without exposing the key or immediate score`);
+      if(i===capacity-2){const pending=(await api(u,'room-state',{room_id:room.id})).data.room;ok(pending.state==='active'&&!pending.scores&&!pending.winners,`${capacity}-player winner stays hidden until the last submission`);}
+    }
+    const final=(await api(u,'room-state',{room_id:room.id})).data.room;
+    ok(final.state==='finished'&&final.scores.length===capacity&&final.winners.length===(capacity===4?1:6)&&final.winners[0]===u,`${capacity}-player final result identifies the winner or all tied winners`);
+    ok((await api(u,'review',{run_id:run._id})).status===400,`${capacity}-player result keeps answer keys locked until 22:10`);
+  }
   const waiting=(await api(v,'room-create',{group_id:g._id,capacity:2})).data.room;
   await at('08:31:00');ok((await api(w,'room-join',{code:waiting.code})).status===400,'waiting rooms expire after 30 minutes');
   const partial=await paper('PARTIAL'),pr=(await api(u,'room-create',{group_id:g._id,capacity:2})).data.room;

@@ -1,3 +1,14 @@
+# 4 va 6 kishilik musobaqa — 2026-11-20
+
+- Xona yaratishda 2, 3, 4 yoki 6 kishi tanlanadi. API hamda SQL bir xil limitlarni tekshiradi; boshqa qiymatlar va bo‘sh qiymat rad etiladi. Mavjud xonalar o‘zgartirilmadi.
+- `npm run test:biology`: **212 PASS**; `npm run test:unit`: **80 PASS**. Yangi sinovlar 4/6 kishilik xona yaratish, oxirgi joyga parallel qo‘shilish, ortiqcha a’zoni rad etish, hamma kelmaguncha boshlamaslik, barcha javoblar saqlanishi, oxirgi javobgacha g‘olibni yashirish, yagona g‘olib/durang va 22:10 gacha javoblar kalitini yashirishni qamradi. Telegram chaqiruvlari fixture, SQL PGlite’da bajarildi.
+- `tests/miniapp-rooms.dom.cjs`: 4 va 6 kishilik tanlovning APIga yuborilishi, bo‘sh joylar, boshlash tugmasi va barcha natija qatorlari — PASS. Mavjud Mini App DOM tekshiruvlarining 4 guruhi, sintaksis, `git diff --check`, Edge bundle — PASS. JSDOM piksel o‘lchamlarini tekshirmaydi; bu o‘zgarish uchun brauzer va haqiqiy Telegram telefon sessiyasi bajarilmadi.
+- `20261120022253_biology_room_capacity_4_6.sql` jonli bazaga qo‘llandi; funksiya tanasi mahalliy nusxaga mos, `security invoker`, bo‘sh `search_path`, faqat `service_role` huquqi saqlangan. Security advisor avvalgi [pg_net WARN](https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public) va alohida `mm_*` jadvallarining [RLS INFO](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy) holatlaridan tashqari yangi muammo topmadi.
+- Mini App [Sites v8](https://biology-mock-enzo.egostrange316.chatgpt.site) joylandi; CSS/JS cache versiyasi 18.
+- Supabase `enzo-bot` v15 ACTIVE. Jonli `/health` 200, imzosiz `/api/room-create` 401. Haqiqiy qatnashchilar yoki guruhlar bilan sinov xonasi ochilmadi.
+
+---
+
 # Ilovaga kirish animatsiyasi — 2026-11-20
 
 - Kirish effekti webview tayyor va ko‘rinadigan bo‘lgandan keyin boshlanadi, 2,8 soniyada yopiladi. Fon harakatini o‘chirish va to‘g‘ridan-to‘g‘ri testga kirish uni bekor qilmaydi. Test foni esa tinch holatda qoladi.

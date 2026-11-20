@@ -160,7 +160,7 @@ async function roomAction(action,body){if(roomBusy)return;roomBusy=true;tell('ar
   try{const data=await request('room-'+action,body);if(data.room.left){await arenaHome();return;}currentRoom=data.room;renderRoom();}catch(e){tell('arenaError',e.message);}finally{roomBusy=false;for(const id of ['createRoom','joinRoom'])$(id).disabled=false;if(currentRoom)renderRoom();}}
 async function openRoom(id){display('arena');tell('arenaError','');try{const data=await request('room-state',{room_id:id});currentRoom=data.room;renderRoom();}catch(e){tell('arenaError',e.message);}}
 function renderRoom(){
-  const r=currentRoom;if(!r)return;$('arenaLobby').hidden=true;$('roomPanel').hidden=false;$('roomCode').textContent=r.code;$('roomMembers').replaceChildren();
+  const r=currentRoom;if(!r)return;$('arenaLobby').hidden=true;$('roomPanel').hidden=false;$('roomCode').textContent=r.code;$('roomMembers').dataset.capacity=String(r.capacity);$('roomMembers').replaceChildren();
   for(const m of r.members){const card=el('div',undefined,'member-card');card.append(el('span',(m.name||'?').slice(0,1).toUpperCase(),'result-avatar'),el('strong',m.name+(m.is_me?' · Siz':'')),el('small',m.submitted?'✓ Topshirdi':r.state==='active'?'Ishlamoqda…':'Tayyor'));$('roomMembers').append(card);}
   for(let i=r.members.length;i<r.capacity;i++){const card=el('div',undefined,'member-card');card.append(el('span','+','result-avatar'),el('small','Kutilmoqda'));$('roomMembers').append(card);}
   const submitted=r.members.filter(m=>m.submitted).length;

@@ -19,7 +19,7 @@ Bot guruhga hali ulanmagan bo‘lsa: botni guruh admini qiling, guruhda `/ulash`
 
 **Reyting:** guruhga 22:10 da kunlik reyting va **Natijangizni ko‘rish** tugmasi yuboriladi. Ilovadagi **Natijalarim** sahifasi faqat shu akkauntning sana, test, boshlash/topshirish vaqti va ballini ko‘rsatadi. **Haftalik yakun** oxirgi tugagan dushanba–yakshanbani jamlaydi. Eski Telegram xabarlari o‘zgarmaydi.
 
-**Musobaqa:** ilovadan 2 yoki 3 kishilik xona yarating; do‘stlar 8 belgili kod bilan qo‘shiladi. Hamma qo‘shilgach egasi hech kim ishlamagan testni tanlab boshlaydi. 60 daqiqagacha, 22:00 dan kech emas. Hamma topshirsa g‘olib/teng ball bo‘lsa durang chiqadi. Javoblar kaliti 22:10 gacha yopiq. Kutish xonasi 30 daqiqada tugaydi; to‘liq topshirilmagan musobaqada g‘olib e’lon qilinmaydi.
+**Musobaqa:** ilovadan 2, 3, 4 yoki 6 kishilik xona yarating; do‘stlar 8 belgili kod bilan qo‘shiladi. Hamma qo‘shilgach egasi hech kim ishlamagan testni tanlab boshlaydi. 60 daqiqagacha, 22:00 dan kech emas. Hamma topshirsa g‘olib/teng ball bo‘lsa durang chiqadi. Javoblar kaliti 22:10 gacha yopiq. Kutish xonasi 30 daqiqada tugaydi; to‘liq topshirilmagan musobaqada g‘olib e’lon qilinmaydi.
 
 **Qayta topshirish:** **🔄 Qayta topshirishga ruxsat** → `MOCKKOD TELEGRAM_ID`; yoki Natijalar → mock → Ruxsat berish → ID. Faqat ochiq mockda, bir marta, jami 5 urinishgacha. O‘quvchi mockni qayta ochadi. Avvalgi urinish tarixi saqlanadi; reytingda oxirgi ruxsat etilgan natija turadi. Muddat tugagach ruxsat ham topshirishni ochmaydi.
 
@@ -144,7 +144,7 @@ Mavjud API manzili: `https://sxcdniihidqfqivfijtn.supabase.co/functions/v1/enzo-
 - `import-ui.js`, `catalog.js`: admin katalogi va bot savollari.
 - `auth.js`, `api.js`: Telegram Mini App autentifikatsiyasi va server API.
 - `bio_packages`: qoralama/tasdiqlangan versiyalar; `bio_mocks`: guruhga o‘tkazishning o‘zgarmas nusxalari.
-- `bio_rooms`: 2/3 kishilik xona, server kodi, qatnashchilar, tanlangan MOCK va muddat.
+- `bio_rooms`: 2/3/4/6 kishilik xona, server kodi, qatnashchilar, tanlangan MOCK va muddat.
 - `bio_attempts`: server boshlanish vaqti, urinish nonce, botda belgilangan javoblar, admin ruxsati.
 - `bio_submissions`: Telegram ID, tashqi MOCK ID, versiya, savol IDlari, javoblar, vaqtlar, ball va avvalgi ruxsatli urinishlar.
 - `bio_begin` va `bio_submit_v2`: PostgreSQL soati va advisory lock orqali atomar start/topshirish; takroriy bir xil request idempotent.

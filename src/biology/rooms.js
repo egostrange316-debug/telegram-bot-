@@ -2,7 +2,7 @@ const {randomBytes}=require('crypto');
 const {BioRoom:Room,BioMock:Mock,BioSubmission:Submission,BioAttempt:Attempt,BioProfile:Profile,BioGroup:Group,roomAction}=require('../storage/postgres');
 const {InputError}=require('./domain');
 const service=require('./service');
-const errors={rate:'Juda ko‘p xona urinishlari. Keyingi soatda qayta urinib ko‘ring.',membership:'Avval shu guruhga qo‘shiling.',capacity:'Xona 2 yoki 3 kishilik bo‘ladi.',busy:'Sizda hali tugamagan xona yoki urinish bor.',missing:'Xona topilmadi. Kodni tekshiring.',closed:'Xona yopilgan yoki muddati tugagan.',full:'Xona to‘lgan.',owner:'Faqat xona egasi boshlaydi.',waiting:'Barcha qatnashchilar qo‘shilishini kuting.',hours:'Musobaqalar 07:00–22:00 oralig‘ida ochiq.',paper:'Bu MOCK musobaqa uchun ochiq emas.',used:'Bu MOCKni qatnashchilardan biri ishlagan yoki boshlab qo‘ygan. Boshqasini tanlang.'};
+const errors={rate:'Juda ko‘p xona urinishlari. Keyingi soatda qayta urinib ko‘ring.',membership:'Avval shu guruhga qo‘shiling.',capacity:'Xona 2, 3, 4 yoki 6 kishilik bo‘ladi.',busy:'Sizda hali tugamagan xona yoki urinish bor.',missing:'Xona topilmadi. Kodni tekshiring.',closed:'Xona yopilgan yoki muddati tugagan.',full:'Xona to‘lgan.',owner:'Faqat xona egasi boshlaydi.',waiting:'Barcha qatnashchilar qo‘shilishini kuting.',hours:'Musobaqalar 07:00–22:00 oralig‘ida ochiq.',paper:'Bu MOCK musobaqa uchun ochiq emas.',used:'Bu MOCKni qatnashchilardan biri ishlagan yoki boshlab qo‘ygan. Boshqasini tanlang.'};
 async function authorize(api,user,groupId){const g=await Group.findById(groupId);await service.enroll(api,user,g);return g;}
 async function candidates(room) {
   const mocks=await Mock.find({group_id:room.group_id,status:'daily'}).sort({createdAt:-1}).limit(1000);
@@ -42,7 +42,7 @@ async function mutate(api,user,action,body) {
   }
   const payload={group_id:body.group_id,capacity:Number(body.capacity),room_id:room?._id,run_id:body.run_id,
     code:action==='create'?randomBytes(4).toString('hex').toUpperCase():String(body.code||'').trim().toUpperCase(),new_id:randomBytes(12).toString('hex'),run_code:randomBytes(3).toString('hex')};
-  if(action==='create'&&![2,3].includes(payload.capacity))throw new InputError(errors.capacity);
+  if(action==='create'&&![2,3,4,6].includes(payload.capacity))throw new InputError(errors.capacity);
   const r=await roomAction({p_user:user.id,p_action:action,p_payload:payload});
   if(!r.ok)throw new InputError(errors[r.reason]||'Xonadagi amal bajarilmadi.');
   if(action==='leave')return {left:true};

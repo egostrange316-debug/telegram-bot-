@@ -4543,7 +4543,7 @@ var require_rooms = __commonJS({
     var { BioRoom: Room, BioMock: Mock, BioSubmission: Submission, BioAttempt: Attempt, BioProfile: Profile, BioGroup: Group, roomAction } = require_postgres();
     var { InputError } = require_domain();
     var service = require_service();
-    var errors = { rate: "Juda ko\u2018p xona urinishlari. Keyingi soatda qayta urinib ko\u2018ring.", membership: "Avval shu guruhga qo\u2018shiling.", capacity: "Xona 2 yoki 3 kishilik bo\u2018ladi.", busy: "Sizda hali tugamagan xona yoki urinish bor.", missing: "Xona topilmadi. Kodni tekshiring.", closed: "Xona yopilgan yoki muddati tugagan.", full: "Xona to\u2018lgan.", owner: "Faqat xona egasi boshlaydi.", waiting: "Barcha qatnashchilar qo\u2018shilishini kuting.", hours: "Musobaqalar 07:00\u201322:00 oralig\u2018ida ochiq.", paper: "Bu MOCK musobaqa uchun ochiq emas.", used: "Bu MOCKni qatnashchilardan biri ishlagan yoki boshlab qo\u2018ygan. Boshqasini tanlang." };
+    var errors = { rate: "Juda ko\u2018p xona urinishlari. Keyingi soatda qayta urinib ko\u2018ring.", membership: "Avval shu guruhga qo\u2018shiling.", capacity: "Xona 2, 3, 4 yoki 6 kishilik bo\u2018ladi.", busy: "Sizda hali tugamagan xona yoki urinish bor.", missing: "Xona topilmadi. Kodni tekshiring.", closed: "Xona yopilgan yoki muddati tugagan.", full: "Xona to\u2018lgan.", owner: "Faqat xona egasi boshlaydi.", waiting: "Barcha qatnashchilar qo\u2018shilishini kuting.", hours: "Musobaqalar 07:00\u201322:00 oralig\u2018ida ochiq.", paper: "Bu MOCK musobaqa uchun ochiq emas.", used: "Bu MOCKni qatnashchilardan biri ishlagan yoki boshlab qo\u2018ygan. Boshqasini tanlang." };
     async function authorize(api, user, groupId) {
       const g = await Group.findById(groupId);
       await service.enroll(api, user, g);
@@ -4611,7 +4611,7 @@ var require_rooms = __commonJS({
         new_id: randomBytes(12).toString("hex"),
         run_code: randomBytes(3).toString("hex")
       };
-      if (action === "create" && ![2, 3].includes(payload.capacity)) throw new InputError(errors.capacity);
+      if (action === "create" && ![2, 3, 4, 6].includes(payload.capacity)) throw new InputError(errors.capacity);
       const r = await roomAction({ p_user: user.id, p_action: action, p_payload: payload });
       if (!r.ok) throw new InputError(errors[r.reason] || "Xonadagi amal bajarilmadi.");
       if (action === "leave") return { left: true };
