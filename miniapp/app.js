@@ -188,7 +188,7 @@ $('joinRoom').onclick=()=>{const code=$('roomCodeInput').value.trim().toUpperCas
 $('startRoom').onclick=()=>roomAction('start',{room_id:currentRoom.id,run_id:$('roomPaper').value});$('leaveRoom').onclick=()=>roomAction('leave',{room_id:currentRoom.id});$('arenaHome').onclick=arenaHome;
 $('copyRoom').onclick=async()=>{try{await navigator.clipboard.writeText(currentRoom.code);$('copyRoom').textContent='Nusxalandi ✓';}catch{tell('arenaError','Xona kodi: '+currentRoom.code);}};
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{if(!token){tell('notice','Telegram bot orqali kiring.');return;}if(b.dataset.tab==='welcome')home();else if(b.dataset.tab==='resultsPage')loadResults();else arenaHome();});
-(async()=>{tg?.ready();tg?.expand();tg?.setHeaderColor?.('#0b100f');tg?.setBackgroundColor?.('#0b100f');if(!tg?.initData){tell('notice','Test, natija va musobaqalarni Telegram bot orqali oching. Akkauntingiz avtomatik tasdiqlanadi.');$('openBot').hidden=false;return;}
+(async()=>{tg?.ready();tg?.expand();tg?.setHeaderColor?.('#0b100f');tg?.setBackgroundColor?.('#0b100f');window.dispatchEvent(new Event('biology:ready'));if(!tg?.initData){tell('notice','Test, natija va musobaqalarni Telegram bot orqali oching. Akkauntingiz avtomatik tasdiqlanadi.');$('openBot').hidden=false;return;}
 try{const session=await request('session',{init_data:tg.initData});token=session.token;user=session.user;$('identity').textContent=user.name;
  const params=new URLSearchParams(location.search),run=params.get('run');
  if(run&&params.get('mode')==='review'){await openAnalysis(run);return;}

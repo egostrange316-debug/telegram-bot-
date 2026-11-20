@@ -1,3 +1,11 @@
+# Ilovaga kirish animatsiyasi — 2026-11-20
+
+- Kirish effekti webview tayyor va ko‘rinadigan bo‘lgandan keyin boshlanadi, 2,8 soniyada yopiladi. Fon harakatini o‘chirish va to‘g‘ridan-to‘g‘ri testga kirish uni bekor qilmaydi. Test foni esa tinch holatda qoladi.
+- Yuklanish yashirin oynada bo‘lsa, birinchi ko‘rinishni kutadi. Animatsiya tugamasdan oyna yashirilsa, qayta ko‘ringanda qayta boshlanadi; tugaganidan keyin oddiy sahifa almashish yoki qaytishda takrorlanmaydi. Birinchi bosish/klaviatura uni o‘tkazadi. Reduced-motion saqlanadi.
+- Mavjud 4 guruh Mini App DOM sinovlari va JavaScript sintaksisi — PASS. Izolyatsiyalangan JSDOM tekshiruvida yashirin ochilish, fon o‘chiq holat, bevosita test, erta bosish, uzilgan ochilishni qayta boshlash va reduced-motion — PASS. Canvas va vaqt bu tekshiruvda soxta; brauzerda haqiqiy renderer bilan fon o‘chiq holatda kirish paneli 2,8 soniyalik animatsiya bilan ochilishi tasdiqlandi. Haqiqiy Telegram telefon sessiyasi bajarilmadi.
+
+---
+
 # Ochilish va 3D fon — 2026-11-19
 
 - 2,1 soniyalik DNK/wordmark ochilish animatsiyasi, bosh sahifada aylanadigan hajmli DNK, fonda DNK, molekula va yorug‘ zarrachalar qo‘shildi. Canvas 3D koordinatalarni perspektivada chizadi, chuqurlik bo‘yicha saralaydi va sharlarni soyalar bilan ko‘rsatadi. Tashqi rasm/video yoki yangi kutubxona talab qilinmaydi.

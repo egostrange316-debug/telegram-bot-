@@ -101,8 +101,8 @@ body{isolation:isolate;background:#080f0c}
 @keyframes scene-arrive{from{opacity:0;transform:perspective(900px) translateY(28px) rotateX(5deg) scale(.975)}to{opacity:1;transform:perspective(900px) translateY(0) rotateX(0) scale(1)}}
 @media(prefers-reduced-motion:no-preference){
   .ambient-glow{animation:ambient-breathe 16s ease-in-out infinite alternate}
-  .app-intro:not([hidden]){animation:intro-reveal 2.1s ease both}
-  .app-intro:not([hidden]) .intro-orbit{animation:intro-ring 2.1s ease-out both}
+  .app-intro:not([hidden]){animation:intro-reveal 2.8s ease both}
+  .app-intro:not([hidden]) .intro-orbit{animation:intro-ring 2.8s ease-out both}
   .app-intro:not([hidden]) .intro-content strong{animation:intro-word .75s .12s cubic-bezier(.16,1,.3,1) both}
   .app-intro:not([hidden]) .intro-content p{animation:page-arrive .6s .4s both}
   .app-intro:not([hidden]) .intro-line{animation:intro-line-grow 1.1s .3s ease both}

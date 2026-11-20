@@ -10,10 +10,24 @@
   if(surfaces.some(s=>!s.ctx)){toggle.hidden=true;return;}
   let enabled=true;
   try{enabled=localStorage.getItem('bio:ambient-motion')!=='off';}catch{}
-  let frame=0,last=0,elapsed=0,heroVisible=true,introTimer=0;
+  let frame=0,last=0,elapsed=0,heroVisible=true,introTimer=0,openingTimer=0;
+  let appReady=false,introState='pending';
   const focused=()=>['exam','review','analysis'].includes(document.body.dataset.page);
   const allowed=()=>enabled&&!reduce?.matches&&!document.hidden&&!focused();
-  const closeIntro=()=>{intro.hidden=true;clearTimeout(introTimer);document.body.classList.remove('intro-playing');};
+  const canRender=()=>!document.hidden&&!reduce?.matches&&(allowed()||introState==='playing');
+  const closeIntro=(complete=true)=>{
+    intro.hidden=true;clearTimeout(introTimer);clearTimeout(openingTimer);openingTimer=0;
+    introState=complete?'done':'pending';document.body.classList.remove('intro-playing');
+  };
+  function queueIntro(){
+    if(!appReady||introState!=='pending'||openingTimer||document.hidden||reduce?.matches)return;
+    // Start after the webview is ready and visible, not while Telegram is opening it.
+    openingTimer=setTimeout(()=>{
+      openingTimer=0;if(document.hidden||reduce?.matches||introState!=='pending')return;
+      introState='playing';intro.hidden=false;document.body.classList.add('intro-playing');
+      resize();sync();introTimer=setTimeout(()=>{closeIntro();sync();},2800);
+    },240);
+  }
   const colors={lime:['#f3ffd5','#b6eb80','#315c37'],cyan:['#e0fff9','#6bdec1','#18594d']};
 
   function sphere(ctx,p,r,color,alpha=1){
@@ -87,13 +101,13 @@
     orbit(ctx,w*.5,h*.52,w*.4,h*.22,1.05+Math.sin(t*.16)*.15,.12);
     helix(ctx,w*.5,h*.5,size,radius,t*(isIntro?1.45:.58),-.2+Math.sin(t*.25)*.08);
   }
-  function draw(){
-    background(surfaces[0],elapsed);
-    if(heroVisible)showcase(surfaces[1],elapsed);
+  function draw(force=false){
+    if(force||allowed())background(surfaces[0],elapsed);
+    if(heroVisible&&(force||allowed()))showcase(surfaces[1],elapsed);
     if(!intro.hidden)showcase(surfaces[2],elapsed,true);
   }
   function tick(now){
-    frame=0;if(!allowed()){last=0;return;}
+    frame=0;if(!canRender()){last=0;return;}
     if(!last||now-last>=1000/30){elapsed+=last?Math.min((now-last)/1000,.08):0;last=now;draw();}
     frame=requestAnimationFrame(tick);
   }
@@ -101,27 +115,32 @@
     const ratio=Math.min(window.devicePixelRatio||1,window.innerWidth<700?1.25:1.5);
     for(const surface of surfaces){const rect=surface.canvas.getBoundingClientRect();surface.w=Math.max(1,rect.width);surface.h=Math.max(1,rect.height);
       surface.canvas.width=Math.round(surface.w*ratio);surface.canvas.height=Math.round(surface.h*ratio);surface.ctx.setTransform(ratio,0,0,ratio,0,0);}
-    draw();
+    draw(true);
   }
   function sync(){
+    if(reduce?.matches)closeIntro();
+    else if(document.hidden&&introState!=='done')closeIntro(false);
+    else queueIntro();
     const moving=enabled&&!reduce?.matches;
     document.body.dataset.sceneMotion=moving?'on':'off';
     toggle.setAttribute('aria-pressed',String(moving&&!focused()));toggle.disabled=Boolean(reduce?.matches)||focused();
     toggle.title=focused()?'Test paytida fon tinch holatda':reduce?.matches?'Telefonda animatsiyalar kamaytirilgan':moving?'Fon animatsiyasini to‘xtatish':'Fon animatsiyasini yoqish';
-    if(!allowed()){cancelAnimationFrame(frame);frame=0;last=0;closeIntro();draw();}
+    if(!canRender()){cancelAnimationFrame(frame);frame=0;last=0;draw(true);}
     else if(!frame)frame=requestAnimationFrame(tick);
   }
   toggle.addEventListener('click',()=>{enabled=!enabled;try{localStorage.setItem('bio:ambient-motion',enabled?'on':'off');}catch{}sync();});
   reduce?.addEventListener?.('change',sync);
   document.addEventListener('visibilitychange',sync);
-  document.addEventListener('pointerdown',closeIntro,{once:true,capture:true});
-  document.addEventListener('keydown',closeIntro,{once:true,capture:true});
+  const skipIntro=()=>{closeIntro();sync();};
+  document.addEventListener('pointerdown',skipIntro,{once:true,capture:true});
+  document.addEventListener('keydown',skipIntro,{once:true,capture:true});
+  const ready=()=>{appReady=true;sync();};
+  window.addEventListener('biology:ready',ready,{once:true});
+  window.addEventListener('load',ready,{once:true});
   new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:['data-page']});
   if(window.IntersectionObserver)new IntersectionObserver(entries=>{heroVisible=entries[0].isIntersecting;if(heroVisible&&!allowed())showcase(surfaces[1],elapsed);}).observe(canvases[1]);
   if(window.ResizeObserver){const observer=new ResizeObserver(resize);canvases.forEach(c=>observer.observe(c));}
   else window.addEventListener('resize',resize);
-  if(allowed()){
-    intro.hidden=false;document.body.classList.add('intro-playing');introTimer=setTimeout(closeIntro,2100);
-  }
   resize();sync();
+  if(document.readyState==='complete')ready();
 })();
