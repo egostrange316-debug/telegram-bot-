@@ -81,3 +81,20 @@ test('public filename alias keeps strict validation, pair identity and path chec
  delete d.key.answers.Q010;
  assert.throws(()=>importFile(zipSync({...files,'MOCK_03_SERVER_ONLY_answers.json':strToU8(JSON.stringify(d.key))}),'x.zip'),/MOCK_03_public.json: Q010/);
 });
+
+test('BIO7_MOCK_06 questions and server-only answer filenames import from the supplied legacy schema',()=>{
+ const mock={mock_id:'BIO7-50-59-M6',questions:Array.from({length:30},(_,i)=>({id:`BIO7-50-59-M6-${String(i+1).padStart(2,'0')}`,topic:55,question:`Savol ${i+1}`,options:{A:'A matn',B:'B matn',C:'C matn',D:'D matn'}}))};
+ const key={mock_id:mock.mock_id,answers:Object.fromEntries(mock.questions.map(q=>[q.id,'B']))};
+ const files={
+  'BIO7_MOCK_06_questions.json':strToU8(JSON.stringify(mock)),
+  'BIO7_MOCK_06_answers_SERVER_ONLY.json':strToU8(JSON.stringify(key)),
+  'BIO7_MOCK_06_BOT.html':strToU8('<script>const answer_key="DO_NOT_IMPORT"</script>'),
+  'README.txt':strToU8('Import note')
+ };
+ const result=importFile(zipSync(files),'Biologiya_MOCK_06_Kitob_asosida.zip');
+ assert.equal(result.mock_id,mock.mock_id);
+ assert.equal(result.question_count,30);
+ assert.equal(result.questions.length,30);
+ assert.deepEqual(result.answer_key,Array(30).fill('B'));
+ assert.ok(!JSON.stringify(result).includes('DO_NOT_IMPORT'));
+});
