@@ -3,7 +3,7 @@
 ## Admin uchun
 
 1. @Enzo_material_bot → `/menu` → **🛠 Admin rejimi**.
-2. **📥 MOCK yuklash** → ZIP yoki yagona JSON yuboring (2 MB gacha). ZIPda bir nechta MOCK bo‘lsa, tugmalardan keraklisini tanlang. Saqlagach qolganlarini ham shu yuklashdan tanlash mumkin.
+2. **📥 MOCK yuklash** → ZIP yoki yagona JSON yuboring (2 MB gacha). ZIPda bir nechta MOCK bo‘lsa, tugmalardan keraklisini tanlang. Saqlagach qolganlarini ham shu yuklashdan tanlash mumkin. Importer `NOM_questions.json + NOM_answers_SERVER_ONLY.json` juftligini ham qabul qiladi.
 3. Bot har bir savolni va kalitni tekshiradi. Xato bo‘lsa savol IDsi bilan yozadi.
 4. **📚 Barcha MOCKlar** → mock → **👁 Savollarni ko‘rish**, **🔑 Kalit**.
 5. **✅ Qoralamani tasdiqlash**. Tasdiqlanmagan qoralama guruhga chiqmaydi.
